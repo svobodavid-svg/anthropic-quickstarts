@@ -57,8 +57,8 @@ export default function ChatInterface() {
 
   if (showSetup) {
     return (
-      <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 max-w-2xl mx-auto">
-        <h2 className="text-lg font-bold text-white mb-4">💬 Chat Setup</h2>
+      <div className="bg-slate-800/50 border border-slate-700/50 backdrop-blur rounded-xl p-6 max-w-2xl mx-auto">
+        <h2 className="text-lg font-bold text-white mb-6">💬 Chat Setup</h2>
 
         <div className="space-y-4 mb-6">
           <div>
@@ -94,9 +94,9 @@ export default function ChatInterface() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto bg-slate-800 border border-slate-700 rounded-lg overflow-hidden flex flex-col h-[600px]">
+    <div className="max-w-2xl mx-auto bg-slate-800/50 border border-slate-700/50 backdrop-blur rounded-xl overflow-hidden flex flex-col h-[600px]">
       {/* Header */}
-      <div className="bg-slate-700 p-4 border-b border-slate-600 flex items-center justify-between">
+      <div className="bg-slate-700/30 p-5 border-b border-slate-600/50 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-white">Chat</h2>
           {charName && <p className="text-sm text-slate-400">Chatting with {charName}</p>}
@@ -138,7 +138,7 @@ export default function ChatInterface() {
       </div>
 
       {/* Input */}
-      <div className="border-t border-slate-600 p-4 bg-slate-700/50">
+      <div className="border-t border-slate-600/50 p-4 bg-slate-700/20">
         <div className="flex gap-2">
           <input
             type="text"

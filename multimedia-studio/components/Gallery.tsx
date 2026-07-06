@@ -17,26 +17,29 @@ export default function Gallery({ type }: GalleryProps) {
 
   if (items.length === 0) {
     return (
-      <div className="bg-slate-800 border border-slate-700 rounded-lg p-12 text-center">
-        <div className="text-4xl mb-3">{type === 'images' ? '🖼️' : '🎥'}</div>
-        <p className="text-slate-400">No {type} yet. Create some to see them here!</p>
+      <div className="bg-slate-800/50 border border-slate-700/50 backdrop-blur rounded-xl p-12 text-center h-[600px] flex flex-col items-center justify-center">
+        <div className="text-6xl mb-4 opacity-50">{type === 'images' ? '🖼️' : '🎥'}</div>
+        <p className="text-slate-400 text-lg">No {type} yet</p>
+        <p className="text-slate-500 text-sm mt-1">Your {type} will appear here</p>
       </div>
     );
   }
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg overflow-hidden flex flex-col h-full">
+    <div className="bg-slate-800/50 border border-slate-700/50 backdrop-blur rounded-xl overflow-hidden flex flex-col h-[600px]">
       {/* Header */}
-      <div className="bg-slate-700 p-4 border-b border-slate-600 flex items-center justify-between">
+      <div className="bg-slate-700/30 p-5 border-b border-slate-600/50 flex items-center justify-between">
         <h2 className="text-lg font-bold text-white">
-          {type === 'images' ? '🖼️ Generated Images' : '🎥 Generated Videos'} ({items.length})
+          {type === 'images' ? '🖼️ Generated' : '🎥 Generated'} <span className="text-slate-400">({items.length})</span>
         </h2>
-        <button
-          onClick={() => (type === 'images' ? clearImages() : clearVideos())}
-          className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition-colors"
-        >
-          Clear
-        </button>
+        {items.length > 0 && (
+          <button
+            onClick={() => (type === 'images' ? clearImages() : clearVideos())}
+            className="text-xs bg-red-600/80 hover:bg-red-700 text-white px-3 py-1.5 rounded-lg transition-colors font-medium"
+          >
+            Clear All
+          </button>
+        )}
       </div>
 
       {/* Items Grid */}

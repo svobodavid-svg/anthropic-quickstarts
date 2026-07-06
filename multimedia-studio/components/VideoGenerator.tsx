@@ -105,8 +105,8 @@ export default function VideoGenerator() {
   };
 
   return (
-    <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-      <h2 className="text-lg font-bold text-white mb-4">🎥 Video Generator</h2>
+    <div className="bg-slate-800/50 border border-slate-700/50 backdrop-blur rounded-xl p-6 sticky top-24">
+      <h2 className="text-lg font-bold text-white mb-5">🎥 Video Generator</h2>
 
       <div className="space-y-4">
         {/* Prompt */}

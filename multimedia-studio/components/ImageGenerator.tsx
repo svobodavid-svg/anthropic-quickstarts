@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useStudio } from '@/lib/store';
 import { createClient } from '@/lib/promptchan-client';
 import { Loader, Zap } from 'lucide-react';
+import PromptMaster from './PromptMaster';
 
 const STYLES = [
   'Cinematic',
@@ -80,8 +81,11 @@ export default function ImageGenerator() {
   };
 
   return (
-    <div className="bg-slate-800/50 border border-slate-700/50 backdrop-blur rounded-xl p-6 sticky top-24">
+    <div className="bg-slate-800/50 border border-slate-700/50 backdrop-blur rounded-xl p-6 sticky top-24 space-y-6">
       <h2 className="text-lg font-bold text-white mb-5 flex items-center gap-2">🖼️ Image Generator</h2>
+
+      {/* Prompt Master */}
+      <PromptMaster type="image" onApply={(enhancedPrompt) => setPrompt(enhancedPrompt)} />
 
       <div className="space-y-4">
         {/* Prompt */}

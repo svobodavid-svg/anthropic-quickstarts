@@ -7,6 +7,10 @@ import ImageGenerator from '@/components/ImageGenerator';
 import VideoGenerator from '@/components/VideoGenerator';
 import ChatInterface from '@/components/ChatInterface';
 import Gallery from '@/components/Gallery';
+import Presets from '@/components/Presets';
+import Collections from '@/components/Collections';
+import BatchGenerator from '@/components/BatchGenerator';
+import Analytics from '@/components/Analytics';
 
 export default function Home() {
   const [mounted, setMounted] = useState(false);
@@ -46,14 +50,14 @@ export default function Home() {
         </header>
 
         {/* Navigation Tabs */}
-        <nav className="border-b border-slate-700/50 bg-slate-800/20 backdrop-blur-sm">
+        <nav className="border-b border-slate-700/50 bg-slate-800/20 backdrop-blur-sm overflow-x-auto">
           <div className="px-6">
-            <div className="flex gap-2">
-              {(['images', 'videos', 'chat'] as const).map((tab) => (
+            <div className="flex gap-2 min-w-max">
+              {(['images', 'videos', 'chat', 'projects', 'analytics', 'collections'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
-                  className={`px-5 py-4 font-semibold transition-all border-b-2 text-sm ${
+                  className={`px-5 py-4 font-semibold transition-all border-b-2 text-sm whitespace-nowrap ${
                     activeTab === tab
                       ? 'text-blue-400 border-blue-400 bg-blue-400/5'
                       : 'text-slate-400 border-transparent hover:text-slate-300 hover:bg-slate-700/20'
@@ -62,6 +66,9 @@ export default function Home() {
                   {tab === 'images' && '🖼️ Images'}
                   {tab === 'videos' && '🎥 Videos'}
                   {tab === 'chat' && '💬 Chat'}
+                  {tab === 'projects' && '📋 Projects'}
+                  {tab === 'analytics' && '📊 Analytics'}
+                  {tab === 'collections' && '🏷️ Collections'}
                 </button>
               ))}
             </div>
@@ -71,28 +78,64 @@ export default function Home() {
         {/* Content */}
         <main className="px-6 py-8">
           {activeTab === 'images' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-1">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-1 space-y-6">
                 <ImageGenerator />
+                <Presets />
+                <BatchGenerator />
               </div>
-              <div className="lg:col-span-2">
+              <div className="lg:col-span-3">
                 <Gallery type="images" />
               </div>
             </div>
           )}
 
           {activeTab === 'videos' && (
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              <div className="lg:col-span-1">
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-1 space-y-6">
                 <VideoGenerator />
+                <Presets />
+                <BatchGenerator />
               </div>
-              <div className="lg:col-span-2">
+              <div className="lg:col-span-3">
                 <Gallery type="videos" />
               </div>
             </div>
           )}
 
           {activeTab === 'chat' && <ChatInterface />}
+
+          {activeTab === 'projects' && (
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-1">
+                <Presets />
+              </div>
+              <div className="lg:col-span-3">
+                <div className="bg-slate-800/50 border border-slate-700/50 backdrop-blur rounded-xl p-8 text-center">
+                  <div className="text-4xl mb-3">📋</div>
+                  <h2 className="text-xl font-bold text-white mb-2">Projects</h2>
+                  <p className="text-slate-400">Save and manage your generation workflows</p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {activeTab === 'analytics' && <Analytics />}
+
+          {activeTab === 'collections' && (
+            <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+              <div className="lg:col-span-1">
+                <Collections />
+              </div>
+              <div className="lg:col-span-3">
+                <div className="bg-slate-800/50 border border-slate-700/50 backdrop-blur rounded-xl p-8 text-center">
+                  <div className="text-4xl mb-3">🏷️</div>
+                  <h2 className="text-xl font-bold text-white mb-2">Your Collections</h2>
+                  <p className="text-slate-400">Organize your generated content</p>
+                </div>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

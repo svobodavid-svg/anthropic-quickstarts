@@ -1,8 +1,12 @@
-"""Render a self-contained HTML snapshot: satellite image + SVG azimuth overlay.
+"""Render a satellite-image snapshot + SVG azimuth overlay as self-contained HTML.
 
-The image is embedded as a base64 data: URI (no external requests at view
-time), so the output works when published as a Claude Artifact, whose CSP
-blocks live calls to tile servers, and when just opened as a plain file.
+The image is embedded as a base64 data: URI and every asset is inlined (the
+only external request is the Google Fonts stylesheet), so the output has no
+external network dependency at view time — it works both as a plain HTML
+file and when published through the Claude `Artifact` tool, whose CSP blocks
+live calls to tile servers. The markup is a fragment (no <!DOCTYPE>/<html>/
+<head>/<body>) so it can be dropped straight into an Artifact's own page
+skeleton; browsers render it fine standalone too.
 """
 
 from __future__ import annotations
@@ -28,7 +32,9 @@ class AzimuthLine:
     beamwidth_deg: float | None = None  # draws a sector wedge instead of a single ray
 
 
-_COLORS = ["#ff5a36", "#2e8bff", "#ffd23f", "#33d17a", "#c77dff"]
+# Categorical ray colors: chosen for contrast against satellite imagery in
+# both themes, independent of the page-chrome palette below.
+_RAY_COLORS = ["#ff6a3d", "#3ea1ff", "#ffd23f", "#3ddc84", "#c792ff"]
 
 
 def _polar_offset_px(azimuth_deg: float, radius_px: float) -> tuple[float, float]:
@@ -71,9 +77,10 @@ def render_html(
 
     ox, oy = origin_px
     svg_parts: list[str] = []
+    ray_chips: list[str] = []
 
     for i, line in enumerate(lines):
-        color = _COLORS[i % len(_COLORS)]
+        color = _RAY_COLORS[i % len(_RAY_COLORS)]
         radius_px = line.distance_m / meters_per_pixel
         if line.beamwidth_deg:
             path = _wedge_path((ox, oy), line.azimuth_deg, line.beamwidth_deg, radius_px)
@@ -93,8 +100,20 @@ def render_html(
         lx, ly = _polar_offset_px(line.azimuth_deg, radius_px * 0.55)
         svg_parts.append(
             f'<text x="{ox + lx:.1f}" y="{oy + ly:.1f}" fill="{color}" font-size="13" '
-            f'font-family="system-ui,sans-serif" font-weight="600" '
-            f'paint-order="stroke" stroke="#0008" stroke-width="3">{_escape(label)}</text>'
+            f'font-family="\'IBM Plex Mono\',ui-monospace,monospace" font-weight="600" '
+            f'paint-order="stroke" stroke="#0009" stroke-width="3">{_escape(label)}</text>'
+        )
+
+        chip_value = f"{line.azimuth_deg:05.1f}°"
+        if line.beamwidth_deg:
+            chip_value += f" ±{line.beamwidth_deg:.0f}°"
+        chip_value += f" · {_format_distance(line.distance_m)}"
+        ray_chips.append(
+            f'<div class="ray-chip" style="--chip-color:{color}">'
+            f'<span class="ray-chip__swatch"></span>'
+            f'<span class="ray-chip__label">{_escape(label)}</span>'
+            f'<span class="ray-chip__value">{_escape(chip_value)}</span>'
+            f"</div>"
         )
 
     if shadow_estimate is not None:
@@ -111,11 +130,11 @@ def render_html(
     # Compass rose (top-right)
     rose_cx, rose_cy, rose_r = size - 46, 46, 26
     svg_parts.append(
-        f'<circle cx="{rose_cx}" cy="{rose_cy}" r="{rose_r}" fill="#0006" stroke="#fff" stroke-width="1.5"/>'
+        f'<circle cx="{rose_cx}" cy="{rose_cy}" r="{rose_r}" fill="#0007" stroke="#fff" stroke-width="1.5"/>'
         f'<line x1="{rose_cx}" y1="{rose_cy + rose_r - 4}" x2="{rose_cx}" y2="{rose_cy - rose_r + 4}" '
         f'stroke="#fff" stroke-width="2"/>'
         f'<text x="{rose_cx}" y="{rose_cy - rose_r + 2}" fill="#fff" font-size="13" '
-        f'font-family="system-ui,sans-serif" font-weight="700" text-anchor="middle">N</text>'
+        f'font-family="\'IBM Plex Sans\',ui-sans-serif,sans-serif" font-weight="700" text-anchor="middle">N</text>'
     )
 
     # Scale bar (bottom-left)
@@ -127,75 +146,188 @@ def render_html(
         f'<line x1="{bar_x}" y1="{bar_y - 5}" x2="{bar_x}" y2="{bar_y + 5}" stroke="#fff" stroke-width="3"/>'
         f'<line x1="{bar_x + bar_px:.1f}" y1="{bar_y - 5}" x2="{bar_x + bar_px:.1f}" y2="{bar_y + 5}" stroke="#fff" stroke-width="3"/>'
         f'<text x="{bar_x}" y="{bar_y - 8}" fill="#fff" font-size="12" '
-        f'font-family="system-ui,sans-serif" paint-order="stroke" stroke="#0008" stroke-width="3">'
+        f'font-family="\'IBM Plex Mono\',ui-monospace,monospace" paint-order="stroke" stroke="#0009" stroke-width="3">'
         f'{_format_distance(bar_m)}</text>'
     )
 
-    legend_lines = [f"Origin: {origin_latlon.lat:.6f}, {origin_latlon.lon:.6f}"]
-    for i, line in enumerate(lines):
-        legend_lines.append(
-            f"● azimuth {line.azimuth_deg:.1f}°"
-            + (f" ±{line.beamwidth_deg:.0f}°" if line.beamwidth_deg else "")
-            + f", {_format_distance(line.distance_m)}"
-            + (f" — {line.label}" if line.label else "")
-        )
+    sun_row = ""
     if sun is not None and sun_datetime is not None:
-        legend_lines.append(
-            f"Sun position used: az {sun.azimuth_deg:.1f}°, elev {sun.elevation_deg:.1f}° "
-            f"at {sun_datetime.strftime('%Y-%m-%d %H:%M UTC')}"
+        sun_row = (
+            '<div class="readout-row">'
+            '<span class="readout-row__key">Sun</span>'
+            f'<span class="readout-row__value">az {sun.azimuth_deg:05.1f}° · '
+            f"elev {sun.elevation_deg:+.1f}° · "
+            f'{sun_datetime.strftime("%Y-%m-%d %H:%M")} UTC (assumed)</span>'
+            "</div>"
         )
+
     if shadow_estimate is not None:
         height_txt = (
             f"{shadow_estimate.estimated_object_height_m:.1f} m"
             if shadow_estimate.estimated_object_height_m is not None
-            else "n/a (sun too low)"
+            else "n/a — sun too low"
         )
-        legend_lines.append(
-            f"Shadow found near origin (dashed circle): length "
-            f"{_format_distance(shadow_estimate.shadow_length_m)}, "
-            f"estimated object height ≈ {height_txt} "
-            f"[{shadow_estimate.confidence} confidence, "
-            f"{shadow_estimate.angular_error_deg:.0f}° from expected sun-shadow direction]"
+        shadow_block = (
+            '<div class="shadow-card">'
+            f'<span class="pill pill--{shadow_estimate.confidence}">{shadow_estimate.confidence} confidence</span>'
+            f'<span class="shadow-card__text">shadow {_format_distance(shadow_estimate.shadow_length_m)} '
+            f"→ est. obstruction height ≈ {height_txt} "
+            f"({shadow_estimate.angular_error_deg:.0f}° off the expected sun-shadow direction)</span>"
+            "</div>"
         )
     else:
-        legend_lines.append(
-            "No usable shadow detected near the origin — no obstruction-height estimate available."
+        shadow_block = (
+            '<div class="shadow-card shadow-card--empty">'
+            '<span class="pill pill--none">no shadow</span>'
+            '<span class="shadow-card__text">No usable shadow detected near the origin — '
+            "no obstruction-height estimate available.</span>"
+            "</div>"
         )
-    legend_lines.append(
-        "Note: this is a heuristic estimate from image shadows + true sun position, not a "
-        "metadata-verified correction — public satellite basemaps do not expose the sensor's "
-        "viewing angle. See README 'Accuracy & limitations'."
-    )
 
-    legend_html = "".join(f"<div>{_escape(t)}</div>" for t in legend_lines)
+    ray_chips_html = "".join(ray_chips) or '<div class="ray-chip ray-chip--empty">no azimuths</div>'
 
-    return f"""<!doctype html>
-<html>
-<head>
-<meta charset="utf-8">
-<title>Azimuth map</title>
+    return f"""<meta charset="utf-8">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
-  :root {{ color-scheme: light dark; }}
-  body {{ margin: 0; font-family: system-ui, sans-serif; background: #111; color: #eee; }}
-  .wrap {{ max-width: {size}px; margin: 0 auto; }}
-  .map {{ position: relative; width: 100%; }}
-  .map svg {{ display: block; width: 100%; height: auto; }}
-  .legend {{ padding: 10px 14px; font-size: 13px; line-height: 1.5; background: #1a1a1a; }}
-  .legend div:last-child {{ margin-top: 6px; opacity: 0.7; font-size: 12px; }}
+  :root {{
+    --bg: #f1efe6;
+    --surface: #fffdf8;
+    --ink: #221e17;
+    --ink-muted: #776d59;
+    --accent: #c9501c;
+    --accent-ink: #fff8f2;
+    --line: #ddd5c1;
+    --shadow: 0 1px 2px rgba(34,30,23,0.06), 0 8px 24px rgba(34,30,23,0.08);
+  }}
+  @media (prefers-color-scheme: dark) {{
+    :root:not([data-theme="light"]) {{
+      --bg: #16130e;
+      --surface: #1f1b14;
+      --ink: #f2ecdd;
+      --ink-muted: #a89a80;
+      --accent: #ff8a4b;
+      --accent-ink: #201200;
+      --line: #37301f;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 10px 30px rgba(0,0,0,0.35);
+    }}
+  }}
+  :root[data-theme="dark"] {{
+    --bg: #16130e;
+    --surface: #1f1b14;
+    --ink: #f2ecdd;
+    --ink-muted: #a89a80;
+    --accent: #ff8a4b;
+    --accent-ink: #201200;
+    --line: #37301f;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 10px 30px rgba(0,0,0,0.35);
+  }}
+  * {{ box-sizing: border-box; }}
+  body {{
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: 'IBM Plex Sans', ui-sans-serif, system-ui, sans-serif;
+    display: flex;
+    justify-content: center;
+    padding: 28px 16px;
+  }}
+  .panel {{
+    width: 100%;
+    max-width: {size}px;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+  }}
+  .panel__head {{
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+  }}
+  .panel__title {{
+    font-weight: 700;
+    font-size: 14px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }}
+  .panel__origin {{
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 13px;
+    color: var(--ink-muted);
+  }}
+  .viewport {{ position: relative; width: 100%; line-height: 0; background: #000; }}
+  .viewport svg {{ display: block; width: 100%; height: auto; }}
+  .readout {{ padding: 16px 18px 18px; display: flex; flex-direction: column; gap: 12px; }}
+  .readout__rays {{ display: flex; flex-wrap: wrap; gap: 8px; }}
+  .ray-chip {{
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 6px 10px;
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    font-size: 12.5px;
+  }}
+  .ray-chip__swatch {{
+    width: 9px; height: 9px; border-radius: 50%;
+    background: var(--chip-color, var(--accent));
+    flex: none;
+  }}
+  .ray-chip__label {{ font-weight: 600; }}
+  .ray-chip__value {{
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+    color: var(--ink-muted);
+  }}
+  .readout-row {{ display: flex; gap: 8px; font-size: 13px; align-items: baseline; }}
+  .readout-row__key {{
+    text-transform: uppercase; letter-spacing: 0.05em; font-size: 11px;
+    color: var(--ink-muted); flex: none; width: 42px;
+  }}
+  .readout-row__value {{
+    font-family: 'IBM Plex Mono', ui-monospace, monospace;
+    font-variant-numeric: tabular-nums;
+  }}
+  .shadow-card {{
+    display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap;
+    padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--line);
+    font-size: 12.5px; color: var(--ink-muted);
+  }}
+  .pill {{
+    flex: none; padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.03em;
+  }}
+  .pill--high {{ background: var(--accent); color: var(--accent-ink); }}
+  .pill--medium {{ background: transparent; border: 1px solid var(--accent); color: var(--accent); }}
+  .pill--low, .pill--none {{ background: transparent; border: 1px solid var(--line); color: var(--ink-muted); }}
+  .note {{ margin: 2px 0 0; font-size: 11.5px; line-height: 1.5; color: var(--ink-muted); }}
 </style>
-</head>
-<body>
-<div class="wrap">
-  <div class="map">
+<div class="panel">
+  <div class="panel__head">
+    <span class="panel__title">Azimuth Mapper</span>
+    <span class="panel__origin">{origin_latlon.lat:.6f}, {origin_latlon.lon:.6f}</span>
+  </div>
+  <div class="viewport">
     <svg viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg">
       <image href="{data_uri}" x="0" y="0" width="{size}" height="{size}"/>
       {''.join(svg_parts)}
     </svg>
   </div>
-  <div class="legend">{legend_html}</div>
+  <div class="readout">
+    <div class="readout__rays">{ray_chips_html}</div>
+    {sun_row}
+    {shadow_block}
+    <p class="note">Shadow-based estimate is a heuristic from image shadows + true sun position, not a metadata-verified correction — public satellite basemaps do not expose the sensor's viewing angle. See README &ldquo;Accuracy &amp; limitations&rdquo;.</p>
+  </div>
 </div>
-</body>
-</html>
 """
 
 

@@ -2,8 +2,8 @@
 
 import "leaflet/dist/leaflet.css";
 
-import L from "leaflet";
-import { useEffect, useRef } from "react";
+import L, { type LeafletEventHandlerFnMap } from "leaflet";
+import { memo, useEffect, useMemo, useRef } from "react";
 import { MapContainer, Marker, Polygon, Polyline, TileLayer, useMap } from "react-leaflet";
 
 import { destinationPoint, type LatLon } from "@/lib/geometry";
@@ -26,7 +26,19 @@ function dotIcon(color: string, size: number, ring = true) {
   });
 }
 
-const originIcon = dotIcon("#ffffff", 14);
+function dotIconDraggable(color: string, size: number) {
+  return L.divIcon({
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    html: `<span style="
+      display:block;width:${size}px;height:${size}px;border-radius:999px;cursor:grab;
+      background:${color};box-shadow:0 0 0 2px #fff, 0 0 0 4px ${color}66, 0 1px 4px rgba(0,0,0,.4);
+    "></span>`,
+  });
+}
+
+const originIcon = dotIconDraggable("#ffffff", 18);
 const shadowIcon = dotIcon("#ffffff", 12, false);
 
 function wedgePoints(origin: LatLon, azimuthDeg: number, beamwidthDeg: number, distanceM: number) {
@@ -70,15 +82,60 @@ export interface AzimuthMapProps {
   origin: LatLon | null;
   rays: AzimuthRay[];
   shadowEstimate: ShadowEstimateResponse | null;
+  /** Called with the new position when the origin marker is dragged. */
+  onOriginMove?: (origin: LatLon) => void;
 }
 
-export default function AzimuthMap({ origin, rays, shadowEstimate }: AzimuthMapProps) {
-  const fallbackCenter: [number, number] = [50.0755, 14.4378]; // Prague, shown until GPS resolves
+const FALLBACK_CENTER: [number, number] = [50.0755, 14.4378]; // Prague, shown until GPS resolves
+
+type RayShape =
+  | { id: string; color: string; kind: "wedge"; points: [number, number][] }
+  | { id: string; color: string; kind: "line"; points: [number, number][] };
+
+function AzimuthMap({ origin, rays, shadowEstimate, onOriginMove }: AzimuthMapProps) {
+  // A live GPS watch re-renders this component several times a second, so the
+  // per-ray geodesy (and especially the wedge polygons, which are dozens of
+  // destinationPoint calls each) is memoised on the values it actually depends
+  // on rather than recomputed on every fix.
+  const shapes = useMemo<RayShape[]>(() => {
+    if (!origin) return [];
+    return rays.map((ray, i) => {
+      const color = RAY_COLORS[i % RAY_COLORS.length];
+      if (ray.beamwidthDeg) {
+        return {
+          id: ray.id,
+          color,
+          kind: "wedge",
+          points: wedgePoints(origin, ray.azimuthDeg, ray.beamwidthDeg, ray.distanceM),
+        };
+      }
+      const dest = destinationPoint(origin, ray.azimuthDeg, ray.distanceM);
+      return {
+        id: ray.id,
+        color,
+        kind: "line",
+        points: [
+          [origin.lat, origin.lon],
+          [dest.lat, dest.lon],
+        ],
+      };
+    });
+  }, [origin, rays]);
+
+  const originEventHandlers = useMemo<LeafletEventHandlerFnMap>(
+    () => ({
+      dragend: (e) => {
+        const { lat, lng } = (e.target as L.Marker).getLatLng();
+        onOriginMove?.({ lat, lon: lng });
+      },
+    }),
+    [onOriginMove]
+  );
 
   return (
-    <div className="relative h-full w-full overflow-hidden rounded-xl border border-border">
+    <div className="map-shell relative h-full w-full overflow-hidden rounded-xl border border-border">
       <MapContainer
-        center={origin ? [origin.lat, origin.lon] : fallbackCenter}
+        center={origin ? [origin.lat, origin.lon] : FALLBACK_CENTER}
         zoom={origin ? 18 : 13}
         className="h-full w-full"
         scrollWheelZoom
@@ -87,32 +144,30 @@ export default function AzimuthMap({ origin, rays, shadowEstimate }: AzimuthMapP
         <ScaleControl />
         <RecenterOnFirstFix origin={origin} />
 
-        {origin &&
-          rays.map((ray, i) => {
-            const color = RAY_COLORS[i % RAY_COLORS.length];
-            if (ray.beamwidthDeg) {
-              return (
-                <Polygon
-                  key={ray.id}
-                  positions={wedgePoints(origin, ray.azimuthDeg, ray.beamwidthDeg, ray.distanceM)}
-                  pathOptions={{ color, weight: 2, fillOpacity: 0.2 }}
-                />
-              );
-            }
-            const dest = destinationPoint(origin, ray.azimuthDeg, ray.distanceM);
-            return (
-              <Polyline
-                key={ray.id}
-                positions={[
-                  [origin.lat, origin.lon],
-                  [dest.lat, dest.lon],
-                ]}
-                pathOptions={{ color, weight: 3 }}
-              />
-            );
-          })}
+        {shapes.map((shape) =>
+          shape.kind === "wedge" ? (
+            <Polygon
+              key={shape.id}
+              positions={shape.points}
+              pathOptions={{ color: shape.color, weight: 2, fillOpacity: 0.2 }}
+            />
+          ) : (
+            <Polyline
+              key={shape.id}
+              positions={shape.points}
+              pathOptions={{ color: shape.color, weight: 3 }}
+            />
+          )
+        )}
 
-        {origin && <Marker position={[origin.lat, origin.lon]} icon={originIcon} />}
+        {origin && (
+          <Marker
+            position={[origin.lat, origin.lon]}
+            icon={originIcon}
+            draggable={Boolean(onOriginMove)}
+            eventHandlers={originEventHandlers}
+          />
+        )}
 
         {shadowEstimate?.found && shadowEstimate.shadowLocation && (
           <Marker
@@ -128,3 +183,5 @@ export default function AzimuthMap({ origin, rays, shadowEstimate }: AzimuthMapP
     </div>
   );
 }
+
+export default memo(AzimuthMap);

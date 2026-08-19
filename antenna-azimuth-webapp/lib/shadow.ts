@@ -19,6 +19,11 @@
  * What is *not* computable from a shadow alone is the satellite's viewing
  * azimuth, so this module never invents a lean direction — see the
  * project README's "Accuracy & limitations" section.
+ *
+ * Performance note: this runs per request on a serverless function over a
+ * 512x512 crop, so the pipeline is written to avoid per-pixel allocation —
+ * see `morphOpen`/`morphClose` (separable passes over reused buffers) and
+ * `connectedComponents` (flat pixel indices in one array, no point objects).
  */
 import type { SolarPosition } from "./solar";
 
@@ -48,24 +53,27 @@ export interface ShadowEstimate {
   centroidPx: [number, number];
 }
 
-function toGrayscale(raw: Buffer, width: number, height: number): Uint8Array {
-  const gray = new Uint8Array(width * height);
-  for (let i = 0; i < width * height; i++) {
-    const r = raw[i * 3];
-    const g = raw[i * 3 + 1];
-    const b = raw[i * 3 + 2];
-    // Same luma weights OpenCV's cv2.COLOR_RGB2GRAY uses.
-    gray[i] = Math.round(0.299 * r + 0.587 * g + 0.114 * b);
-  }
-  return gray;
-}
+/**
+ * Threshold straight to a 0/1 mask, fusing grayscale conversion, the Otsu
+ * histogram and the comparison into two passes over the pixels.
+ *
+ * Luma uses the same integer weights OpenCV's cv2.COLOR_RGB2GRAY applies
+ * (0.299/0.587/0.114 in Q8 fixed point), so the threshold lands on the same
+ * bucket the Python version would pick.
+ */
+function thresholdMask(raw: Buffer, width: number, height: number): Uint8Array {
+  const n = width * height;
+  const gray = new Uint8Array(n);
+  const hist = new Int32Array(256);
 
-function otsuThreshold(gray: Uint8Array): number {
-  const hist = new Array(256).fill(0);
-  for (let i = 0; i < gray.length; i++) hist[gray[i]]++;
-  const total = gray.length;
+  for (let i = 0, p = 0; i < n; i++, p += 3) {
+    const v = (77 * raw[p] + 150 * raw[p + 1] + 29 * raw[p + 2] + 128) >> 8;
+    gray[i] = v;
+    hist[v]++;
+  }
+
   let sum = 0;
-  for (let i = 0; i < 256; i++) sum += i * hist[i];
+  for (let t = 0; t < 256; t++) sum += t * hist[t];
 
   let sumB = 0;
   let wB = 0;
@@ -74,118 +82,159 @@ function otsuThreshold(gray: Uint8Array): number {
   for (let t = 0; t < 256; t++) {
     wB += hist[t];
     if (wB === 0) continue;
-    const wF = total - wB;
+    const wF = n - wB;
     if (wF === 0) break;
     sumB += t * hist[t];
-    const meanB = sumB / wB;
-    const meanF = (sum - sumB) / wF;
-    const variance = wB * wF * (meanB - meanF) * (meanB - meanF);
+    const meanDiff = sumB / wB - (sum - sumB) / wF;
+    const variance = wB * wF * meanDiff * meanDiff;
     if (variance > maxVariance) {
       maxVariance = variance;
       threshold = t;
     }
   }
-  return threshold;
+
+  const mask = new Uint8Array(n);
+  for (let i = 0; i < n; i++) mask[i] = gray[i] <= threshold ? 1 : 0;
+  return mask;
 }
 
+/**
+ * One separable 3x3 morphology pass over a binary mask, out-of-bounds
+ * treated as 0. A 3x3 rectangular structuring element is separable, so the
+ * horizontal and vertical halves give exactly the same result as the naive
+ * 9-neighbour scan while touching a third of the memory.
+ *
+ * `erode` is a min filter (AND), `dilate` a max filter (OR); on a 0/1 mask
+ * those are just bitwise ops. Both buffers are caller-owned and reused
+ * across passes so a full open+close allocates nothing.
+ */
 function morphPass(
-  mask: Uint8Array,
+  src: Uint8Array,
+  dst: Uint8Array,
+  scratch: Uint8Array,
   width: number,
   height: number,
-  mode: "erode" | "dilate"
-): Uint8Array {
-  const out = new Uint8Array(width * height);
+  erode: boolean
+): void {
+  // Horizontal.
   for (let y = 0; y < height; y++) {
+    const row = y * width;
     for (let x = 0; x < width; x++) {
-      let value = mode === "erode" ? 1 : 0;
-      for (let dy = -1; dy <= 1 && (mode === "erode" ? value === 1 : value === 0); dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
-          const nx = x + dx;
-          const ny = y + dy;
-          const neighbor = nx >= 0 && nx < width && ny >= 0 && ny < height ? mask[ny * width + nx] : 0;
-          if (mode === "erode" && neighbor === 0) {
-            value = 0;
-            break;
-          }
-          if (mode === "dilate" && neighbor === 1) {
-            value = 1;
-            break;
-          }
-        }
-      }
-      out[y * width + x] = value;
+      const i = row + x;
+      const left = x > 0 ? src[i - 1] : 0;
+      const right = x < width - 1 ? src[i + 1] : 0;
+      scratch[i] = erode ? left & src[i] & right : left | src[i] | right;
     }
   }
-  return out;
+
+  // Vertical.
+  const last = height - 1;
+  for (let y = 0; y < height; y++) {
+    const row = y * width;
+    const up = y > 0 ? row - width : -1;
+    const down = y < last ? row + width : -1;
+    for (let x = 0; x < width; x++) {
+      const i = row + x;
+      const a = up >= 0 ? scratch[up + x] : 0;
+      const b = down >= 0 ? scratch[down + x] : 0;
+      dst[i] = erode ? a & scratch[i] & b : a | scratch[i] | b;
+    }
+  }
 }
 
-function morphOpen(mask: Uint8Array, width: number, height: number): Uint8Array {
-  return morphPass(morphPass(mask, width, height, "erode"), width, height, "dilate");
+interface ComponentRange {
+  start: number;
+  length: number;
 }
 
-function morphClose(mask: Uint8Array, width: number, height: number): Uint8Array {
-  return morphPass(morphPass(mask, width, height, "dilate"), width, height, "erode");
-}
+/**
+ * Flood-fill every set region, writing member pixels as flat indices into a
+ * single array and returning (start, length) ranges into it.
+ *
+ * The output array doubles as the BFS queue — each component's own slice is
+ * filled front-to-back while being read front-to-back — so labelling a whole
+ * image allocates one Int32Array rather than one small array per pixel.
+ */
+function connectedComponents(
+  mask: Uint8Array,
+  width: number,
+  height: number
+): { pixels: Int32Array; ranges: ComponentRange[] } {
+  const n = width * height;
+  const visited = new Uint8Array(n);
+  const pixels = new Int32Array(n);
+  const ranges: ComponentRange[] = [];
+  let write = 0;
 
-function connectedComponents(mask: Uint8Array, width: number, height: number): [number, number][][] {
-  const visited = new Uint8Array(width * height);
-  const components: [number, number][][] = [];
+  for (let seed = 0; seed < n; seed++) {
+    if (mask[seed] !== 1 || visited[seed] === 1) continue;
 
-  for (let start = 0; start < mask.length; start++) {
-    if (mask[start] !== 1 || visited[start] === 1) continue;
+    const start = write;
+    visited[seed] = 1;
+    pixels[write++] = seed;
 
-    const component: [number, number][] = [];
-    const stack = [start];
-    visited[start] = 1;
-    while (stack.length > 0) {
-      const idx = stack.pop()!;
+    for (let read = start; read < write; read++) {
+      const idx = pixels[read];
       const x = idx % width;
-      const y = Math.floor(idx / width);
-      component.push([x, y]);
+      const y = (idx / width) | 0;
 
-      for (let dy = -1; dy <= 1; dy++) {
-        for (let dx = -1; dx <= 1; dx++) {
+      const xMin = x > 0 ? -1 : 0;
+      const xMax = x < width - 1 ? 1 : 0;
+      const yMin = y > 0 ? -1 : 0;
+      const yMax = y < height - 1 ? 1 : 0;
+
+      for (let dy = yMin; dy <= yMax; dy++) {
+        const row = idx + dy * width;
+        for (let dx = xMin; dx <= xMax; dx++) {
           if (dx === 0 && dy === 0) continue;
-          const nx = x + dx;
-          const ny = y + dy;
-          if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-          const nIdx = ny * width + nx;
+          const nIdx = row + dx;
           if (mask[nIdx] === 1 && visited[nIdx] === 0) {
             visited[nIdx] = 1;
-            stack.push(nIdx);
+            pixels[write++] = nIdx;
           }
         }
       }
     }
-    components.push(component);
+
+    ranges.push({ start, length: write - start });
   }
-  return components;
+
+  return { pixels, ranges };
 }
 
-function principalAxis(points: [number, number][]) {
-  const n = points.length;
+/** PCA principal axis + oriented extent of one component, read in place. */
+function principalAxis(
+  pixels: Int32Array,
+  start: number,
+  length: number,
+  width: number
+) {
+  const end = start + length;
+
   let sx = 0;
   let sy = 0;
-  for (const [x, y] of points) {
-    sx += x;
-    sy += y;
+  for (let i = start; i < end; i++) {
+    const idx = pixels[i];
+    sx += idx % width;
+    sy += (idx / width) | 0;
   }
-  const cx = sx / n;
-  const cy = sy / n;
+  const cx = sx / length;
+  const cy = sy / length;
 
   let cxx = 0;
   let cyy = 0;
   let cxy = 0;
-  for (const [x, y] of points) {
-    const dx = x - cx;
-    const dy = y - cy;
+  for (let i = start; i < end; i++) {
+    const idx = pixels[i];
+    const dx = (idx % width) - cx;
+    const dy = ((idx / width) | 0) - cy;
     cxx += dx * dx;
     cyy += dy * dy;
     cxy += dx * dy;
   }
-  cxx /= n;
-  cyy /= n;
-  cxy /= n;
+  cxx /= length;
+  cyy /= length;
+  cxy /= length;
 
   const trace = cxx + cyy;
   const det = cxx * cyy - cxy * cxy;
@@ -215,9 +264,10 @@ function principalAxis(points: [number, number][]) {
   let majorMax = -Infinity;
   let minorMin = Infinity;
   let minorMax = -Infinity;
-  for (const [x, y] of points) {
-    const dx = x - cx;
-    const dy = y - cy;
+  for (let i = start; i < end; i++) {
+    const idx = pixels[i];
+    const dx = (idx % width) - cx;
+    const dy = ((idx / width) | 0) - cy;
     const projMajor = dx * vx + dy * vy;
     const projMinor = dx * mvx + dy * mvy;
     if (projMajor < majorMin) majorMin = projMajor;
@@ -244,33 +294,40 @@ export function detectShadows(
   height: number,
   originPx: [number, number]
 ): ShadowObservation[] {
-  const gray = toGrayscale(raw, width, height);
-  const threshold = otsuThreshold(gray);
+  const n = width * height;
+  const mask = thresholdMask(raw, width, height);
 
-  let mask: Uint8Array<ArrayBufferLike> = new Uint8Array(width * height);
-  for (let i = 0; i < gray.length; i++) mask[i] = gray[i] <= threshold ? 1 : 0;
+  // Open (erode -> dilate) then close (dilate -> erode), ping-ponging between
+  // two buffers plus one scratch row-buffer shared by every separable pass.
+  const buffer = new Uint8Array(n);
+  const scratch = new Uint8Array(n);
+  morphPass(mask, buffer, scratch, width, height, true); // erode
+  morphPass(buffer, mask, scratch, width, height, false); // dilate  -> open, in mask
+  morphPass(mask, buffer, scratch, width, height, false); // dilate
+  morphPass(buffer, mask, scratch, width, height, true); // erode   -> close, in mask
 
-  mask = morphOpen(mask, width, height);
-  mask = morphClose(mask, width, height);
-
-  const components = connectedComponents(mask, width, height);
+  const { pixels, ranges } = connectedComponents(mask, width, height);
   const [ox, oy] = originPx;
 
   const observations: ShadowObservation[] = [];
-  for (const component of components) {
-    if (component.length < MIN_BLOB_AREA_PX) continue;
+  for (const { start, length } of ranges) {
+    if (length < MIN_BLOB_AREA_PX) continue;
 
-    const { centroid, majorLen, minorLen, axisDegA, axisDegB } = principalAxis(component);
+    const { centroid, majorLen, minorLen, axisDegA, axisDegB } = principalAxis(
+      pixels,
+      start,
+      length,
+      width
+    );
     if (majorLen / Math.max(minorLen, 1e-6) < MIN_ELONGATION) continue;
 
-    const distance = Math.hypot(centroid[0] - ox, centroid[1] - oy);
     observations.push({
       centroidPx: centroid,
       axisDegA,
       axisDegB,
       lengthPx: majorLen,
-      areaPx: component.length,
-      distanceFromOriginPx: distance,
+      areaPx: length,
+      distanceFromOriginPx: Math.hypot(centroid[0] - ox, centroid[1] - oy),
     });
   }
 

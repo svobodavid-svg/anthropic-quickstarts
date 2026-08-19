@@ -118,6 +118,9 @@ export function AzimuthControls({
               </Button>
             )}
           </div>
+          <p className="text-[11px] text-muted-foreground">
+            Tip: drag the white marker on the map to reposition it.
+          </p>
         </CardContent>
       </Card>
 

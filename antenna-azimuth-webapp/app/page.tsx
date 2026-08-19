@@ -5,10 +5,18 @@ import { useCallback, useEffect, useState } from "react";
 
 import { AzimuthControls, type GpsStatus } from "@/components/AzimuthControls";
 import { ShadowReadout } from "@/components/ShadowReadout";
-import type { LatLon } from "@/lib/geometry";
+import { haversineDistanceM, type LatLon } from "@/lib/geometry";
 import type { AzimuthRay, ShadowEstimateResponse } from "@/lib/types";
 
 const AzimuthMap = dynamic(() => import("@/components/AzimuthMap"), { ssr: false });
+
+/**
+ * Ignore GPS fixes that haven't actually moved. A high-accuracy watch reports
+ * a new position roughly once a second and consumer GPS jitters by well under
+ * a metre between fixes, so without this the map re-renders (and every ray is
+ * re-projected) continuously while standing still.
+ */
+const MIN_GPS_MOVE_M = 0.5;
 
 function defaultRays(): AzimuthRay[] {
   return [
@@ -38,8 +46,13 @@ export default function Home() {
     }
     const watchId = navigator.geolocation.watchPosition(
       (pos) => {
-        setLiveOrigin({ lat: pos.coords.latitude, lon: pos.coords.longitude });
-        setGpsAccuracyM(pos.coords.accuracy);
+        const next = { lat: pos.coords.latitude, lon: pos.coords.longitude };
+        setLiveOrigin((prev) =>
+          prev && haversineDistanceM(prev, next) < MIN_GPS_MOVE_M ? prev : next
+        );
+        // Rounded because it's displayed to the metre — keeping the raw float
+        // would re-render on every fix even when nothing visibly changed.
+        setGpsAccuracyM(Math.round(pos.coords.accuracy));
         setGpsStatus("watching");
       },
       (err) => {
@@ -51,6 +64,8 @@ export default function Home() {
   }, []);
 
   const origin = manualOrigin ?? liveOrigin;
+
+  const handleUseLiveGps = useCallback(() => setManualOrigin(null), []);
 
   const handleAnalyze = useCallback(async () => {
     if (!origin) return;
@@ -78,7 +93,12 @@ export default function Home() {
   return (
     <main className="flex h-dvh flex-col md:flex-row">
       <div className="relative h-[45vh] p-3 md:h-full md:flex-1 md:p-4">
-        <AzimuthMap origin={origin} rays={rays} shadowEstimate={shadowEstimate} />
+        <AzimuthMap
+          origin={origin}
+          rays={rays}
+          shadowEstimate={shadowEstimate}
+          onOriginMove={setManualOrigin}
+        />
       </div>
 
       <aside className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-border md:h-full md:w-[380px] md:flex-none md:border-l md:border-t-0">
@@ -95,7 +115,7 @@ export default function Home() {
           gpsAccuracyM={manualOrigin ? null : gpsAccuracyM}
           manualOverride={manualOrigin !== null}
           onManualOriginChange={setManualOrigin}
-          onUseLiveGps={() => setManualOrigin(null)}
+          onUseLiveGps={handleUseLiveGps}
           onAnalyze={handleAnalyze}
           analyzing={analyzing}
         />

@@ -2,7 +2,7 @@
 
 import "leaflet/dist/leaflet.css";
 
-import L from "leaflet";
+import L, { type LeafletEventHandlerFnMap } from "leaflet";
 import { memo, useEffect, useMemo, useRef } from "react";
 import { MapContainer, Marker, Polygon, Polyline, TileLayer, useMap } from "react-leaflet";
 
@@ -26,7 +26,19 @@ function dotIcon(color: string, size: number, ring = true) {
   });
 }
 
-const originIcon = dotIcon("#ffffff", 14);
+function dotIconDraggable(color: string, size: number) {
+  return L.divIcon({
+    className: "",
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size / 2],
+    html: `<span style="
+      display:block;width:${size}px;height:${size}px;border-radius:999px;cursor:grab;
+      background:${color};box-shadow:0 0 0 2px #fff, 0 0 0 4px ${color}66, 0 1px 4px rgba(0,0,0,.4);
+    "></span>`,
+  });
+}
+
+const originIcon = dotIconDraggable("#ffffff", 18);
 const shadowIcon = dotIcon("#ffffff", 12, false);
 
 function wedgePoints(origin: LatLon, azimuthDeg: number, beamwidthDeg: number, distanceM: number) {
@@ -70,6 +82,8 @@ export interface AzimuthMapProps {
   origin: LatLon | null;
   rays: AzimuthRay[];
   shadowEstimate: ShadowEstimateResponse | null;
+  /** Called with the new position when the origin marker is dragged. */
+  onOriginMove?: (origin: LatLon) => void;
 }
 
 const FALLBACK_CENTER: [number, number] = [50.0755, 14.4378]; // Prague, shown until GPS resolves
@@ -78,7 +92,7 @@ type RayShape =
   | { id: string; color: string; kind: "wedge"; points: [number, number][] }
   | { id: string; color: string; kind: "line"; points: [number, number][] };
 
-function AzimuthMap({ origin, rays, shadowEstimate }: AzimuthMapProps) {
+function AzimuthMap({ origin, rays, shadowEstimate, onOriginMove }: AzimuthMapProps) {
   // A live GPS watch re-renders this component several times a second, so the
   // per-ray geodesy (and especially the wedge polygons, which are dozens of
   // destinationPoint calls each) is memoised on the values it actually depends
@@ -108,6 +122,16 @@ function AzimuthMap({ origin, rays, shadowEstimate }: AzimuthMapProps) {
     });
   }, [origin, rays]);
 
+  const originEventHandlers = useMemo<LeafletEventHandlerFnMap>(
+    () => ({
+      dragend: (e) => {
+        const { lat, lng } = (e.target as L.Marker).getLatLng();
+        onOriginMove?.({ lat, lon: lng });
+      },
+    }),
+    [onOriginMove]
+  );
+
   return (
     <div className="map-shell relative h-full w-full overflow-hidden rounded-xl border border-border">
       <MapContainer
@@ -136,7 +160,14 @@ function AzimuthMap({ origin, rays, shadowEstimate }: AzimuthMapProps) {
           )
         )}
 
-        {origin && <Marker position={[origin.lat, origin.lon]} icon={originIcon} />}
+        {origin && (
+          <Marker
+            position={[origin.lat, origin.lon]}
+            icon={originIcon}
+            draggable={Boolean(onOriginMove)}
+            eventHandlers={originEventHandlers}
+          />
+        )}
 
         {shadowEstimate?.found && shadowEstimate.shadowLocation && (
           <Marker

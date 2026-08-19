@@ -93,7 +93,12 @@ export default function Home() {
   return (
     <main className="flex h-dvh flex-col md:flex-row">
       <div className="relative h-[45vh] p-3 md:h-full md:flex-1 md:p-4">
-        <AzimuthMap origin={origin} rays={rays} shadowEstimate={shadowEstimate} />
+        <AzimuthMap
+          origin={origin}
+          rays={rays}
+          shadowEstimate={shadowEstimate}
+          onOriginMove={setManualOrigin}
+        />
       </div>
 
       <aside className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-border md:h-full md:w-[380px] md:flex-none md:border-l md:border-t-0">

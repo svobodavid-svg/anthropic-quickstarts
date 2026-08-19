@@ -1,8 +1,11 @@
 "use client";
 
+import { RefreshCw, WifiOff } from "lucide-react";
+
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import type { ShadowEstimateResponse } from "@/lib/types";
+import type { ShadowProbeResponse } from "@/lib/types";
 
 function formatDistance(meters: number): string {
   return meters >= 1000 ? `${(meters / 1000).toFixed(1)} km` : `${Math.round(meters)} m`;
@@ -14,8 +17,17 @@ const BADGE_VARIANT: Record<"low" | "medium" | "high", "muted" | "outline" | "de
   high: "default",
 };
 
-export function ShadowReadout({ result }: { result: ShadowEstimateResponse }) {
+export function ShadowReadout({
+  result,
+  onRetry,
+  retrying,
+}: {
+  result: ShadowProbeResponse;
+  onRetry?: () => void;
+  retrying?: boolean;
+}) {
   const captureTime = new Date(result.captureDatetime);
+  const offline = typeof navigator !== "undefined" && navigator.onLine === false;
 
   return (
     <Card>
@@ -32,8 +44,17 @@ export function ShadowReadout({ result }: { result: ShadowEstimateResponse }) {
         </div>
 
         {result.error && (
-          <div className="rounded-md border border-destructive/40 bg-destructive/10 p-2 text-destructive">
-            {result.error}
+          <div className="space-y-2 rounded-md border border-destructive/40 bg-destructive/10 p-2 text-destructive">
+            <div className="flex items-start gap-1.5">
+              {offline && <WifiOff className="mt-0.5 h-3.5 w-3.5 flex-none" />}
+              <span>{offline ? "You appear to be offline — imagery can't be fetched." : result.error}</span>
+            </div>
+            {onRetry && (
+              <Button variant="outline" size="sm" onClick={onRetry} disabled={retrying}>
+                <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${retrying ? "animate-spin" : ""}`} />
+                Try again
+              </Button>
+            )}
           </div>
         )}
 
@@ -41,7 +62,7 @@ export function ShadowReadout({ result }: { result: ShadowEstimateResponse }) {
           <div className="flex items-center gap-2 rounded-md border border-border bg-background p-2">
             <Badge variant="muted">no shadow</Badge>
             <span className="text-muted-foreground">
-              No usable shadow detected near the origin — no obstruction-height estimate available.
+              No usable shadow found here — enter the reference height by hand instead.
             </span>
           </div>
         )}
@@ -52,9 +73,9 @@ export function ShadowReadout({ result }: { result: ShadowEstimateResponse }) {
               {result.confidence} confidence
             </Badge>
             <span className="text-muted-foreground">
-              shadow {formatDistance(result.shadowLengthM ?? 0)} → est. obstruction height ≈{" "}
-              {result.estimatedObjectHeightM != null
-                ? `${result.estimatedObjectHeightM.toFixed(1)} m`
+              shadow {formatDistance(result.shadowLengthM ?? 0)} ⇒ reference object ≈{" "}
+              {result.referenceHeightM != null
+                ? `${result.referenceHeightM.toFixed(1)} m`
                 : "n/a — sun too low"}{" "}
               ({(result.angularErrorDeg ?? 0).toFixed(0)}° off the expected sun-shadow direction)
             </span>
@@ -62,9 +83,9 @@ export function ShadowReadout({ result }: { result: ShadowEstimateResponse }) {
         )}
 
         <p className="text-[11px] leading-relaxed text-muted-foreground">
-          Heuristic estimate from image shadows + true sun position, not a metadata-verified
-          correction — public satellite basemaps don&rsquo;t expose the sensor&rsquo;s viewing
-          angle. See the README &ldquo;Accuracy &amp; limitations&rdquo; section.
+          The height is measured only to calibrate how far this imagery leans — the
+          shadow direction itself is checked against the true sun position as a
+          sanity check on the measurement.
         </p>
       </CardContent>
     </Card>

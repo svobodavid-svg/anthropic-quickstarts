@@ -1,7 +1,13 @@
 /**
- * Heuristic shadow-blob detection + obstruction-height estimate — server-only
- * (operates on a raw RGB pixel buffer from tiles.ts). Ported from
+ * Heuristic shadow-blob detection — server-only (operates on a raw RGB pixel
+ * buffer from tiles.ts). Ported from
  * antenna-azimuth-mapper/azimuth_mapper/{shadow_detect,correction}.py.
+ *
+ * Purpose: measure a *reference object's* shadow so its height can be
+ * recovered, because that height is what `lib/relief.ts` needs to turn the
+ * object's observed lean into the imagery's satellite viewing geometry. The
+ * height is an intermediate quantity for calibrating azimuth corrections —
+ * it is not a claim about obstructions along a path.
  *
  * There's no OpenCV here, so this reimplements the same pipeline shape by
  * hand: grayscale -> Otsu threshold -> morphological open/close -> connected
@@ -13,18 +19,18 @@
  * minimum-area rotated rect — for the elongated, roughly-rectangular blobs
  * shadows produce, both track the OpenCV originals closely.
  *
- * What's actually computable without per-tile sensor metadata: shadow
- * length in the image, combined with the astronomically-true sun elevation
- * for the place/time, gives a real estimate of a nearby object's height.
- * What is *not* computable from a shadow alone is the satellite's viewing
- * azimuth, so this module never invents a lean direction — see the
- * project README's "Accuracy & limitations" section.
+ * What's computable here without per-tile sensor metadata: shadow length in
+ * the image, combined with the astronomically-true sun elevation for the
+ * place/time, gives the reference object's height. The satellite's viewing
+ * geometry does *not* follow from a shadow alone — that needs the object's
+ * lean as well, which the user marks in the UI and `lib/relief.ts` solves.
  *
  * Performance note: this runs per request on a serverless function over a
  * 512x512 crop, so the pipeline is written to avoid per-pixel allocation —
  * see `morphOpen`/`morphClose` (separable passes over reused buffers) and
  * `connectedComponents` (flat pixel indices in one array, no point objects).
  */
+import { heightFromShadow } from "./relief";
 import type { SolarPosition } from "./solar";
 
 const MIN_BLOB_AREA_PX = 25;
@@ -48,7 +54,8 @@ export interface ShadowEstimate {
   /** Distance from the astronomically-expected shadow direction. */
   angularErrorDeg: number;
   shadowLengthM: number;
-  estimatedObjectHeightM: number | null;
+  /** Height of the object that cast it; feeds the imagery calibration. */
+  referenceHeightM: number | null;
   confidence: "low" | "medium" | "high";
   centroidPx: [number, number];
 }
@@ -355,10 +362,11 @@ export function estimateFromShadow(
   }
 
   const shadowLengthM = obs.lengthPx * metersPerPx;
-  const estimatedObjectHeightM =
-    sun.elevationDeg > MIN_SUN_ELEVATION_FOR_HEIGHT_DEG
-      ? shadowLengthM * Math.tan((sun.elevationDeg * Math.PI) / 180)
-      : null;
+  const referenceHeightM = heightFromShadow(
+    shadowLengthM,
+    sun.elevationDeg,
+    MIN_SUN_ELEVATION_FOR_HEIGHT_DEG
+  );
 
   let confidence: ShadowEstimate["confidence"];
   if (angularErrorDeg < 10 && obs.areaPx > 60) confidence = "high";
@@ -369,7 +377,7 @@ export function estimateFromShadow(
     shadowAzimuthDeg,
     angularErrorDeg,
     shadowLengthM,
-    estimatedObjectHeightM,
+    referenceHeightM,
     confidence,
     centroidPx: obs.centroidPx,
   };

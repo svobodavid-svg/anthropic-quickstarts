@@ -2,8 +2,9 @@
 
 A real-time web app that plots compass azimuths (e.g. for aiming a
 directional or sector antenna) from your **live browser GPS position** onto
-a satellite map, with a best-effort obstruction-height estimate from
-shadows detected near your position.
+a satellite map, and corrects those bearings for the angle the imagery was
+shot from, so a target picked off a mast top or rooftop points where it
+really is.
 
 **Live demo:** https://antenna-azimuth-webapp.vercel.app
 
@@ -37,50 +38,97 @@ works fine; once deployed (e.g. to Vercel) HTTPS is automatic.
 2. Add one or more azimuths (degrees, 0 = north) with a distance; give one
    a beamwidth to draw a sector wedge instead of a line, for planning a
    directional/sector antenna's coverage cone.
-3. Click **Analyze obstruction near origin** to look for a shadow near your
-   position and estimate the height of whatever cast it.
+3. Calibrate the imagery once per site: mark an upright object's base and
+   apparent top, then enter its height or press **From shadow** to measure
+   it. Pick targets with **Pick target on map** and give each a height above
+   ground to see its corrected bearing.
 4. If GPS is unavailable or you want to check a different spot, type
    coordinates directly into the Latitude/Longitude fields — this switches
    to a manual override; "Use live GPS instead" switches back.
 
-## Accuracy & limitations
+## What is and isn't distorted
 
 The azimuth rays themselves are exact geodesic math from your GPS
-coordinates — the "real-time" and "azimuth" parts are as accurate as your
-device's GPS fix.
+coordinates. A satellite basemap and a vector basemap are both Web Mercator,
+north-up, on the same tile grid, and a bearing here is computed from
+latitude and longitude rather than from pixels — so **for two points on the
+ground the azimuth is identical on either layer.** There is nothing to
+correct there, and this app doesn't pretend otherwise.
 
-**The shadow-based obstruction estimate is a heuristic, not a certified
-measurement** — same caveat as the CLI/skill version, and for the same
-reason: public satellite basemaps (Esri, Mapbox, Google) are mosaics with
-no exposed per-tile sensor viewing-angle or capture-date metadata, so there
-is no way to compute a rigorous photogrammetric correction (which way a
-tall object leans in the image). What this app *can* and does compute: it
-detects an elongated dark blob near your position in the imagery, checks
-whether its orientation matches the astronomically-true sun direction for
-the assumed time, and if so reports the shadow's length and — from
-`length × tan(sun elevation)` — an estimated height for whatever cast it,
-with a confidence level and how many degrees off the expected shadow
-direction it was. Treat it as "there may be an obstruction of roughly this
-height near here," not a survey-grade figure, and never as a claim about
-which direction an object leans, since that isn't recoverable without the
-sensor's viewing azimuth.
+What genuinely is displaced is anything standing *above* the ground.
+Orthorectification places the terrain correctly using a bare-earth model,
+but a mast, a rooftop or a chimney isn't in that model: its top is imaged
+along the slanted line of sight to the satellite and lands away from its
+true ground position by
 
-## How it works
+    d = h · cot(E_sat)      along bearing   A_sat + 180°
+
+where `h` is height above ground and `E_sat` / `A_sat` are the satellite's
+elevation and azimuth. Picking an antenna link's far end by its mast top —
+the normal way to pick it — therefore gives a bearing that's off. At 30 m
+height and 30° off-nadir that's about 17 m of displacement: roughly **2° of
+azimuth error at 500 m, 5° at 200 m**, and asymptotically nothing at long
+range.
+
+## How the correction works
+
+`E_sat` and `A_sat` aren't published per tile, but they can be recovered
+from the image, because a shadow and a lean are the same radial geometry
+with the sun swapped for the satellite:
+
+    shadow:  L_shadow = h · cot(E_sun),  bearing A_sun + 180°
+    lean:    L_lean   = h · cot(E_sat),  bearing A_sat + 180°
+
+The sun's position is computed astronomically, so measuring a reference
+object's shadow gives its height `h`; with `h` known, that same object's
+observed lean gives the satellite geometry. In the app: mark one upright
+object's **base** and its **apparent top**, supply its height (or press
+**From shadow** to measure it), and every elevated target you pick then gets
+a corrected bearing alongside the raw one.
+
+**Caveats worth keeping in mind.** The shadow measurement is a heuristic —
+it detects an elongated dark blob and checks its direction against the true
+sun, which is a sanity check rather than a guarantee it found the right
+object; entering a known height by hand is more reliable. A calibration is
+only valid for the patch of imagery it was measured on, since a basemap is a
+mosaic of images from different passes. Ground-level targets need no
+correction at all. And a separate real-world error source this app can't see
+is basemap georeferencing offset — Esri's mosaic can sit several metres off
+in places, which no amount of lean correction fixes.
+
+## Layout
 
 - `lib/geometry.ts`, `lib/solar.ts` — geodesic and solar-position math,
   ported 1:1 from the CLI's `azimuth_mapper/geometry.py` and `solar.py` so
   both tools agree.
+- `lib/relief.ts` — the correction itself: recover the imagery's viewing
+  geometry from one reference object, then map an apparent position back to
+  its true ground position. Covered by `lib/relief.test.ts`.
 - `components/AzimuthMap.tsx` — a `react-leaflet` map with an Esri World
-  Imagery tile layer, your live GPS marker, and the azimuth rays/wedges
-  (computed client-side, no server round-trip).
+  Imagery tile layer, your live GPS marker, the azimuth rays/wedges and the
+  calibration/target markers (all computed client-side).
 - `app/api/shadow-estimate/route.ts` (Node runtime — needs `sharp`) —
   server-side only, because reading pixel data from a cross-origin tile
   image in the browser would hit canvas CORS tainting: it fetches/stitches
   Esri tiles, decodes them, and runs the shadow-detection + sun-position
   heuristic (`lib/shadow.ts`, `lib/tiles.ts` — ported from the CLI's
   `shadow_detect.py`/`correction.py`/`imagery.py`, since there's no OpenCV
-  here). This only runs when you click **Analyze**, not on every GPS
-  update, to avoid hammering the public tile endpoint.
+  here). It only runs on demand, to avoid hammering the public tile endpoint.
+- `app/api/export/route.ts` — renders the current view as a self-contained
+  SVG for filing or sending on.
+- `lib/persist.ts` — session state in `localStorage`, and the shareable link
+  (encoded in the URL fragment, so a shared position never reaches a server
+  log).
+
+## Tests
+
+```bash
+npm test
+```
+
+Vitest covers the geometry, solar and relief modules — including a
+round-trip that synthesises a lean for a known satellite geometry and checks
+the calibration recovers it, and the hand-worked 2°-at-500 m case above.
 
 ## Deployment
 

@@ -136,8 +136,8 @@ def main(argv: list[str] | None = None) -> int:
         print(f"  azimuth {line.azimuth_deg:.1f}° x {line.distance_m:.0f} m -> {dest.lat:.6f}, {dest.lon:.6f}")
     if shadow_estimate is not None:
         height = (
-            f"{shadow_estimate.estimated_object_height_m:.1f} m"
-            if shadow_estimate.estimated_object_height_m is not None
+            f"{shadow_estimate.reference_height_m:.1f} m"
+            if shadow_estimate.reference_height_m is not None
             else "n/a"
         )
         print(

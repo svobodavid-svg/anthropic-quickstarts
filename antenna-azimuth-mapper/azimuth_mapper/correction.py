@@ -1,16 +1,14 @@
-"""Turn a detected shadow + the true sun position into a bounded estimate.
+"""Turn a detected shadow + the true sun position into a reference height.
 
-What's actually computable without per-tile sensor metadata: shadow length
-in the image, combined with the astronomically-true sun elevation for the
-place/time, gives a real estimate of a nearby object's height (classic
-shadow-length trigonometry). That's reported here.
+Shadow length in the image, combined with the astronomically-true sun
+elevation for the place/time, gives the height of the object that cast it
+(classic shadow-length trigonometry). That height is the input needed to
+calibrate how far this imagery leans — see the README's "What is and isn't
+distorted" section — not a statement about obstructions on a path.
 
-What is *not* computable from a shadow alone is the satellite's viewing
-azimuth, which is what would be needed to say which way a tall object leans
-in the image (true photogrammetric relief displacement / collinearity
-correction). Public satellite basemaps don't expose that per tile, so this
-module never invents a lean direction — see the README's
-"Accuracy & limitations" section.
+A shadow alone does *not* give the satellite's viewing azimuth: that needs
+the object's observed lean as well. The web app pairs the two; this module
+supplies the height half.
 """
 
 from __future__ import annotations
@@ -30,7 +28,7 @@ class ShadowEstimate:
     shadow_azimuth_deg: float  # resolved direction, object base -> shadow tip
     angular_error_deg: float  # distance from the astronomically-expected shadow direction
     shadow_length_m: float
-    estimated_object_height_m: float | None
+    reference_height_m: float | None
     confidence: str  # "low" | "medium" | "high"
     centroid_px: tuple[float, float]
 
@@ -70,7 +68,7 @@ def estimate_from_shadow(
         shadow_azimuth_deg=shadow_azimuth,
         angular_error_deg=angular_error,
         shadow_length_m=shadow_length_m,
-        estimated_object_height_m=height,
+        reference_height_m=height,
         confidence=confidence,
         centroid_px=obs.centroid_px,
     )

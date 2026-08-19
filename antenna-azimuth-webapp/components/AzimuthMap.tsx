@@ -3,43 +3,47 @@
 import "leaflet/dist/leaflet.css";
 
 import L, { type LeafletEventHandlerFnMap } from "leaflet";
-import { memo, useEffect, useMemo, useRef } from "react";
-import { MapContainer, Marker, Polygon, Polyline, TileLayer, useMap } from "react-leaflet";
+import { Fragment, memo, useEffect, useMemo, useRef } from "react";
+import {
+  MapContainer,
+  Marker,
+  Polygon,
+  Polyline,
+  TileLayer,
+  useMap,
+  useMapEvents,
+} from "react-leaflet";
 
-import { destinationPoint, type LatLon } from "@/lib/geometry";
-import { RAY_COLORS, type AzimuthRay, type ShadowEstimateResponse } from "@/lib/types";
+import type { MarkMode } from "@/components/CalibrationPanel";
+import { bearingBetween, destinationPoint, type LatLon } from "@/lib/geometry";
+import { type ImageryCalibration, correctApparentPosition } from "@/lib/relief";
+import { RAY_COLORS, type AzimuthRay, type ShadowProbeResponse } from "@/lib/types";
 
 const ESRI_WORLD_IMAGERY_URL =
   "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 const ESRI_ATTRIBUTION =
   "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community";
 
-function dotIcon(color: string, size: number, ring = true) {
+function dotIcon(color: string, size: number, opts: { ring?: boolean; grab?: boolean } = {}) {
+  const { ring = true, grab = false } = opts;
   return L.divIcon({
     className: "",
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     html: `<span style="
       display:block;width:${size}px;height:${size}px;border-radius:999px;
-      background:${color};box-shadow:0 0 0 2px #fff${ring ? ", 0 0 0 4px " + color + "66" : ""};
+      ${grab ? "cursor:grab;" : ""}
+      background:${color};box-shadow:0 0 0 2px #fff${ring ? ", 0 0 0 4px " + color + "66" : ""}, 0 1px 4px rgba(0,0,0,.4);
     "></span>`,
   });
 }
 
-function dotIconDraggable(color: string, size: number) {
-  return L.divIcon({
-    className: "",
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size / 2],
-    html: `<span style="
-      display:block;width:${size}px;height:${size}px;border-radius:999px;cursor:grab;
-      background:${color};box-shadow:0 0 0 2px #fff, 0 0 0 4px ${color}66, 0 1px 4px rgba(0,0,0,.4);
-    "></span>`,
-  });
-}
-
-const originIcon = dotIconDraggable("#ffffff", 18);
-const shadowIcon = dotIcon("#ffffff", 12, false);
+const originIcon = dotIcon("#ffffff", 18, { grab: true });
+const shadowIcon = dotIcon("#ffffff", 12, { ring: false });
+const baseIcon = dotIcon("#3ddc84", 12, { ring: false });
+const topIcon = dotIcon("#ffd23f", 12, { ring: false });
+const targetIcon = dotIcon("#c792ff", 13, { ring: false });
+const correctedIcon = dotIcon("#ff6a3d", 13);
 
 function wedgePoints(origin: LatLon, azimuthDeg: number, beamwidthDeg: number, distanceM: number) {
   const start = azimuthDeg - beamwidthDeg / 2;
@@ -78,21 +82,62 @@ function ScaleControl() {
   return null;
 }
 
+/** Routes map clicks to whichever point is currently being marked. */
+function ClickCapture({
+  markMode,
+  onPick,
+}: {
+  markMode: MarkMode;
+  onPick: (mode: Exclude<MarkMode, "none">, at: LatLon) => void;
+}) {
+  const map = useMapEvents({
+    click(e) {
+      if (markMode === "none") return;
+      onPick(markMode, { lat: e.latlng.lat, lon: e.latlng.lng });
+    },
+  });
+  useEffect(() => {
+    const container = map.getContainer();
+    container.style.cursor = markMode === "none" ? "" : "crosshair";
+    return () => {
+      container.style.cursor = "";
+    };
+  }, [map, markMode]);
+  return null;
+}
+
 export interface AzimuthMapProps {
   origin: LatLon | null;
   rays: AzimuthRay[];
-  shadowEstimate: ShadowEstimateResponse | null;
-  /** Called with the new position when the origin marker is dragged. */
+  shadowProbe: ShadowProbeResponse | null;
+  calibration: ImageryCalibration | null;
+  calibrationBase: LatLon | null;
+  calibrationTop: LatLon | null;
+  markMode: MarkMode;
+  onPick: (mode: Exclude<MarkMode, "none">, at: LatLon) => void;
   onOriginMove?: (origin: LatLon) => void;
 }
 
 const FALLBACK_CENTER: [number, number] = [50.0755, 14.4378]; // Prague, shown until GPS resolves
 
-type RayShape =
-  | { id: string; color: string; kind: "wedge"; points: [number, number][] }
-  | { id: string; color: string; kind: "line"; points: [number, number][] };
+type RayShape = {
+  id: string;
+  color: string;
+  kind: "wedge" | "line";
+  points: [number, number][];
+};
 
-function AzimuthMap({ origin, rays, shadowEstimate, onOriginMove }: AzimuthMapProps) {
+function AzimuthMap({
+  origin,
+  rays,
+  shadowProbe,
+  calibration,
+  calibrationBase,
+  calibrationTop,
+  markMode,
+  onPick,
+  onOriginMove,
+}: AzimuthMapProps) {
   // A live GPS watch re-renders this component several times a second, so the
   // per-ray geodesy (and especially the wedge polygons, which are dozens of
   // destinationPoint calls each) is memoised on the values it actually depends
@@ -101,15 +146,24 @@ function AzimuthMap({ origin, rays, shadowEstimate, onOriginMove }: AzimuthMapPr
     if (!origin) return [];
     return rays.map((ray, i) => {
       const color = RAY_COLORS[i % RAY_COLORS.length];
+      // A picked target defines the bearing; a typed azimuth is used as-is.
+      const bearing = ray.target
+        ? bearingBetween(
+            origin,
+            calibration
+              ? correctApparentPosition(ray.target.apparent, ray.target.heightM, calibration)
+              : ray.target.apparent
+          )
+        : ray.azimuthDeg;
       if (ray.beamwidthDeg) {
         return {
           id: ray.id,
           color,
           kind: "wedge",
-          points: wedgePoints(origin, ray.azimuthDeg, ray.beamwidthDeg, ray.distanceM),
+          points: wedgePoints(origin, bearing, ray.beamwidthDeg, ray.distanceM),
         };
       }
-      const dest = destinationPoint(origin, ray.azimuthDeg, ray.distanceM);
+      const dest = destinationPoint(origin, bearing, ray.distanceM);
       return {
         id: ray.id,
         color,
@@ -120,7 +174,7 @@ function AzimuthMap({ origin, rays, shadowEstimate, onOriginMove }: AzimuthMapPr
         ],
       };
     });
-  }, [origin, rays]);
+  }, [origin, rays, calibration]);
 
   const originEventHandlers = useMemo<LeafletEventHandlerFnMap>(
     () => ({
@@ -143,6 +197,7 @@ function AzimuthMap({ origin, rays, shadowEstimate, onOriginMove }: AzimuthMapPr
         <TileLayer url={ESRI_WORLD_IMAGERY_URL} attribution={ESRI_ATTRIBUTION} maxZoom={19} />
         <ScaleControl />
         <RecenterOnFirstFix origin={origin} />
+        <ClickCapture markMode={markMode} onPick={onPick} />
 
         {shapes.map((shape) =>
           shape.kind === "wedge" ? (
@@ -160,6 +215,45 @@ function AzimuthMap({ origin, rays, shadowEstimate, onOriginMove }: AzimuthMapPr
           )
         )}
 
+        {/* Calibration reference: base -> apparent top, i.e. the measured lean. */}
+        {calibrationBase && calibrationTop && (
+          <Polyline
+            positions={[
+              [calibrationBase.lat, calibrationBase.lon],
+              [calibrationTop.lat, calibrationTop.lon],
+            ]}
+            pathOptions={{ color: "#ffd23f", weight: 2, dashArray: "4,4" }}
+          />
+        )}
+        {calibrationBase && <Marker position={[calibrationBase.lat, calibrationBase.lon]} icon={baseIcon} />}
+        {calibrationTop && <Marker position={[calibrationTop.lat, calibrationTop.lon]} icon={topIcon} />}
+
+        {/* Picked targets: where they look, and where they really are. */}
+        {rays.map((ray) => {
+          if (!ray.target) return null;
+          const { apparent, heightM } = ray.target;
+          const corrected = calibration
+            ? correctApparentPosition(apparent, heightM, calibration)
+            : null;
+          return (
+            <Fragment key={`t-${ray.id}`}>
+              <Marker position={[apparent.lat, apparent.lon]} icon={targetIcon} />
+              {corrected && (
+                <>
+                  <Polyline
+                    positions={[
+                      [apparent.lat, apparent.lon],
+                      [corrected.lat, corrected.lon],
+                    ]}
+                    pathOptions={{ color: "#ff6a3d", weight: 2, dashArray: "3,3" }}
+                  />
+                  <Marker position={[corrected.lat, corrected.lon]} icon={correctedIcon} />
+                </>
+              )}
+            </Fragment>
+          );
+        })}
+
         {origin && (
           <Marker
             position={[origin.lat, origin.lon]}
@@ -169,9 +263,9 @@ function AzimuthMap({ origin, rays, shadowEstimate, onOriginMove }: AzimuthMapPr
           />
         )}
 
-        {shadowEstimate?.found && shadowEstimate.shadowLocation && (
+        {shadowProbe?.found && shadowProbe.shadowLocation && (
           <Marker
-            position={[shadowEstimate.shadowLocation.lat, shadowEstimate.shadowLocation.lon]}
+            position={[shadowProbe.shadowLocation.lat, shadowProbe.shadowLocation.lon]}
             icon={shadowIcon}
           />
         )}
@@ -180,6 +274,12 @@ function AzimuthMap({ origin, rays, shadowEstimate, onOriginMove }: AzimuthMapPr
       <div className="pointer-events-none absolute right-3 top-3 flex h-9 w-9 items-center justify-center rounded-full bg-black/55 font-sans text-sm font-bold text-white backdrop-blur-sm">
         N
       </div>
+
+      {markMode !== "none" && (
+        <div className="pointer-events-none absolute inset-x-3 top-3 mx-auto w-fit rounded-full bg-black/70 px-3 py-1.5 font-sans text-xs text-white backdrop-blur-sm">
+          Click the map to set the {markMode === "base" ? "object base" : markMode === "top" ? "apparent top" : "target"}
+        </div>
+      )}
     </div>
   );
 }

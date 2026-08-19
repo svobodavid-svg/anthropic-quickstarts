@@ -15,6 +15,66 @@ import { type LatLon, TILE_SIZE_PX, lonlatToGlobalPixel } from "./geometry";
 const TILE_URL = (z: number, y: number, x: number) =>
   `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
 
+/**
+ * Small bounded tile cache.
+ *
+ * Calibrating and then probing a few targets hits the same handful of tiles
+ * repeatedly, and this is a public endpoint we don't want to hammer. Entries
+ * are raw PNG bytes; the map is capped and evicted oldest-first (insertion
+ * order, re-inserting on hit to make it LRU rather than FIFO).
+ */
+const TILE_CACHE_MAX = 64;
+const tileCache = new Map<string, Buffer>();
+
+async function fetchTile(z: number, y: number, x: number): Promise<Buffer> {
+  const key = `${z}/${y}/${x}`;
+  const hit = tileCache.get(key);
+  if (hit) {
+    tileCache.delete(key);
+    tileCache.set(key, hit);
+    return hit;
+  }
+
+  const resp = await fetch(TILE_URL(z, y, x));
+  if (!resp.ok) {
+    throw new Error(`Tile fetch failed (${resp.status}) for ${TILE_URL(z, y, x)}`);
+  }
+  const buf = Buffer.from(await resp.arrayBuffer());
+
+  tileCache.set(key, buf);
+  if (tileCache.size > TILE_CACHE_MAX) {
+    const oldest = tileCache.keys().next().value;
+    if (oldest !== undefined) tileCache.delete(oldest);
+  }
+  return buf;
+}
+
+/**
+ * Deepest zoom Esri actually serves at this location, at or below `preferred`.
+ *
+ * World Imagery reaches z19 in much of the world but stops shallower in
+ * places; asking for a level that isn't there returns an error tile, so probe
+ * downward instead of failing the request outright.
+ */
+export async function deepestAvailableZoom(
+  center: LatLon,
+  preferred = 19,
+  floor = 15
+): Promise<number> {
+  for (let zoom = preferred; zoom >= floor; zoom--) {
+    const [x, y] = lonlatToGlobalPixel(center, zoom);
+    const tx = Math.floor(x / TILE_SIZE_PX);
+    const ty = Math.floor(y / TILE_SIZE_PX);
+    try {
+      await fetchTile(zoom, ty, tx);
+      return zoom;
+    } catch {
+      // Try the next level down.
+    }
+  }
+  throw new Error(`No Esri imagery available at zoom ${floor}-${preferred} for this location`);
+}
+
 export interface MapSnapshot {
   /** Raw RGB pixel buffer, width * height * 3 bytes, row-major. */
   raw: Buffer;
@@ -58,12 +118,7 @@ export async function fetchSnapshot(
   const composites = await Promise.all(
     tileCoords.map(async ({ tx, ty }) => {
       const wrappedX = ((tx % nTiles) + nTiles) % nTiles;
-      const url = TILE_URL(zoom, ty, wrappedX);
-      const resp = await fetch(url);
-      if (!resp.ok) {
-        throw new Error(`Tile fetch failed (${resp.status}) for ${url}`);
-      }
-      const buf = Buffer.from(await resp.arrayBuffer());
+      const buf = await fetchTile(zoom, ty, wrappedX);
       return {
         input: buf,
         left: (tx - firstTileX) * TILE_SIZE_PX,

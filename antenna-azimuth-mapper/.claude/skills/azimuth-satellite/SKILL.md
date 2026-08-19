@@ -1,6 +1,6 @@
 ---
 name: azimuth-satellite
-description: Plot a compass azimuth (e.g. for aiming a directional antenna) from a GPS point onto a satellite-image snapshot, with a best-effort obstruction-height estimate from shadows in the image.
+description: Plot a compass azimuth (e.g. for aiming a directional antenna) from a GPS point onto a satellite-image snapshot, and measure a reference object's height from its shadow — the input that calibrates the imagery's viewing angle.
 ---
 
 # Azimuth satellite mapper
@@ -16,8 +16,9 @@ Briefly explain what's about to happen: you'll ask for their position and
 the azimuth(s) they want plotted, run the mapper, and show them the
 resulting satellite snapshot with the azimuth line(s) drawn on it — plus,
 if a usable shadow is visible near their position, a rough height estimate
-of whatever cast it (useful as an obstruction check for antenna aiming).
-Mention up front that the obstruction estimate is a heuristic, not a
+of whatever cast it. That height is what calibrates how far this imagery
+leans, which is what makes a bearing to an elevated target trustworthy.
+Mention up front that the shadow measurement is a heuristic, not a
 survey-grade measurement — see this project's `README.md` "Accuracy &
 limitations" section if they want the details.
 

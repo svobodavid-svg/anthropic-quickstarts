@@ -1,12 +1,14 @@
 "use client";
 
-import { Loader2, Plus, Radar, Trash2 } from "lucide-react";
+import { Crosshair, Plus, Trash2 } from "lucide-react";
 
+import type { MarkMode } from "@/components/CalibrationPanel";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import type { LatLon } from "@/lib/geometry";
+import { haversineDistanceM, type LatLon } from "@/lib/geometry";
+import { correctedAzimuth, type ImageryCalibration } from "@/lib/relief";
 import { RAY_COLORS, type AzimuthRay } from "@/lib/types";
 
 export type GpsStatus = "idle" | "watching" | "denied" | "unsupported" | "error";
@@ -17,11 +19,14 @@ interface AzimuthControlsProps {
   origin: LatLon | null;
   gpsStatus: GpsStatus;
   gpsAccuracyM: number | null;
+  headingDeg: number | null;
   manualOverride: boolean;
   onManualOriginChange: (origin: LatLon) => void;
   onUseLiveGps: () => void;
-  onAnalyze: () => void;
-  analyzing: boolean;
+  calibration: ImageryCalibration | null;
+  markMode: MarkMode;
+  onPickTarget: (rayId: string) => void;
+  pickingRayId: string | null;
 }
 
 function newRay(index: number): AzimuthRay {
@@ -48,11 +53,14 @@ export function AzimuthControls({
   origin,
   gpsStatus,
   gpsAccuracyM,
+  headingDeg,
   manualOverride,
   onManualOriginChange,
   onUseLiveGps,
-  onAnalyze,
-  analyzing,
+  calibration,
+  markMode,
+  onPickTarget,
+  pickingRayId,
 }: AzimuthControlsProps) {
   function updateRay(id: string, patch: Partial<AzimuthRay>) {
     onRaysChange(rays.map((r) => (r.id === id ? { ...r, ...patch } : r)));
@@ -60,10 +68,6 @@ export function AzimuthControls({
 
   function removeRay(id: string) {
     onRaysChange(rays.filter((r) => r.id !== id));
-  }
-
-  function addRay() {
-    onRaysChange([...rays, newRay(rays.length)]);
   }
 
   const gpsOk = gpsStatus === "watching" && !manualOverride;
@@ -111,7 +115,10 @@ export function AzimuthControls({
             </div>
           </div>
           <div className="flex items-center justify-between text-[11px] text-muted-foreground">
-            <span>{gpsAccuracyM ? `Accuracy ~${Math.round(gpsAccuracyM)} m` : " "}</span>
+            <span>
+              {gpsAccuracyM ? `Accuracy ~${Math.round(gpsAccuracyM)} m` : " "}
+              {headingDeg != null && ` · facing ${Math.round(headingDeg)}°`}
+            </span>
             {manualOverride && (
               <Button variant="link" size="sm" className="h-auto p-0 text-[11px]" onClick={onUseLiveGps}>
                 Use live GPS instead
@@ -129,80 +136,165 @@ export function AzimuthControls({
           <CardTitle className="text-sm">Azimuths</CardTitle>
         </CardHeader>
         <CardContent className="space-y-3 pt-0">
-          {rays.map((ray, i) => (
-            <div key={ray.id} className="rounded-lg border border-border p-3">
-              <div className="mb-2 flex items-center gap-2">
-                <span
-                  className="h-2.5 w-2.5 flex-none rounded-full"
-                  style={{ background: RAY_COLORS[i % RAY_COLORS.length] }}
-                />
-                <Input
-                  className="h-7 border-0 bg-transparent px-1 font-sans text-sm shadow-none"
-                  value={ray.label}
-                  onChange={(e) => updateRay(ray.id, { label: e.target.value })}
-                  placeholder="Label"
-                />
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 flex-none"
-                  onClick={() => removeRay(ray.id)}
-                  aria-label={`Remove ${ray.label}`}
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+          {rays.map((ray, i) => {
+            const color = RAY_COLORS[i % RAY_COLORS.length];
+            const correction =
+              ray.target && origin
+                ? correctedAzimuth(origin, ray.target.apparent, ray.target.heightM, calibration)
+                : null;
+            const rangeM =
+              ray.target && origin ? haversineDistanceM(origin, ray.target.apparent) : null;
+
+            return (
+              <div key={ray.id} className="rounded-lg border border-border p-3">
+                <div className="mb-2 flex items-center gap-2">
+                  <span
+                    className="h-2.5 w-2.5 flex-none rounded-full"
+                    style={{ background: color }}
+                  />
+                  <Input
+                    className="h-7 border-0 bg-transparent px-1 font-sans text-sm shadow-none"
+                    value={ray.label}
+                    onChange={(e) => updateRay(ray.id, { label: e.target.value })}
+                    placeholder="Label"
+                  />
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-7 w-7 flex-none"
+                    onClick={() => removeRay(ray.id)}
+                    aria-label={`Remove ${ray.label}`}
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+
+                {ray.target ? (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-2 gap-2">
+                      <div>
+                        <Label htmlFor={`h-${ray.id}`}>Target height m</Label>
+                        <Input
+                          id={`h-${ray.id}`}
+                          type="number"
+                          min={0}
+                          value={ray.target.heightM}
+                          onChange={(e) =>
+                            updateRay(ray.id, {
+                              target: { ...ray.target!, heightM: Number(e.target.value) },
+                            })
+                          }
+                        />
+                      </div>
+                      <div>
+                        <Label>Range</Label>
+                        <div className="flex h-9 items-center font-mono text-sm tabular-nums">
+                          {rangeM != null
+                            ? rangeM >= 1000
+                              ? `${(rangeM / 1000).toFixed(2)} km`
+                              : `${Math.round(rangeM)} m`
+                            : "—"}
+                        </div>
+                      </div>
+                    </div>
+
+                    {correction && (
+                      <div className="space-y-0.5 rounded-md border border-border bg-background p-2 font-mono text-[11px] tabular-nums">
+                        <div className="flex justify-between">
+                          <span className="text-muted-foreground">as picked</span>
+                          <span>{correction.rawDeg.toFixed(2)}°</span>
+                        </div>
+                        <div className="flex justify-between font-semibold text-brand">
+                          <span>corrected</span>
+                          <span>{correction.correctedDeg.toFixed(2)}°</span>
+                        </div>
+                        <div className="flex justify-between text-muted-foreground">
+                          <span>Δ</span>
+                          <span>
+                            {correction.deltaDeg >= 0 ? "+" : ""}
+                            {correction.deltaDeg.toFixed(2)}°
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                    {!calibration && (
+                      <p className="text-[11px] text-muted-foreground">
+                        Calibrate the imagery above to correct this bearing.
+                      </p>
+                    )}
+
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="h-auto p-0 text-[11px]"
+                      onClick={() => updateRay(ray.id, { target: undefined })}
+                    >
+                      Use a typed azimuth instead
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <Label htmlFor={`az-${ray.id}`}>Azimuth °</Label>
+                        <Input
+                          id={`az-${ray.id}`}
+                          type="number"
+                          value={ray.azimuthDeg}
+                          onChange={(e) => updateRay(ray.id, { azimuthDeg: Number(e.target.value) })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`dist-${ray.id}`}>Distance m</Label>
+                        <Input
+                          id={`dist-${ray.id}`}
+                          type="number"
+                          value={ray.distanceM}
+                          onChange={(e) => updateRay(ray.id, { distanceM: Number(e.target.value) })}
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor={`bw-${ray.id}`}>Beamwidth °</Label>
+                        <Input
+                          id={`bw-${ray.id}`}
+                          type="number"
+                          placeholder="line"
+                          value={ray.beamwidthDeg ?? ""}
+                          onChange={(e) =>
+                            updateRay(ray.id, {
+                              beamwidthDeg: e.target.value === "" ? null : Number(e.target.value),
+                            })
+                          }
+                        />
+                      </div>
+                    </div>
+                    <Button
+                      variant={markMode === "target" && pickingRayId === ray.id ? "brand" : "outline"}
+                      size="sm"
+                      className="w-full"
+                      onClick={() => onPickTarget(ray.id)}
+                    >
+                      <Crosshair className="mr-1.5 h-3.5 w-3.5" />
+                      {markMode === "target" && pickingRayId === ray.id
+                        ? "Click the target on the map…"
+                        : "Pick target on map"}
+                    </Button>
+                  </div>
+                )}
               </div>
-              <div className="grid grid-cols-3 gap-2">
-                <div>
-                  <Label htmlFor={`az-${ray.id}`}>Azimuth °</Label>
-                  <Input
-                    id={`az-${ray.id}`}
-                    type="number"
-                    value={ray.azimuthDeg}
-                    onChange={(e) => updateRay(ray.id, { azimuthDeg: Number(e.target.value) })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor={`dist-${ray.id}`}>Distance m</Label>
-                  <Input
-                    id={`dist-${ray.id}`}
-                    type="number"
-                    value={ray.distanceM}
-                    onChange={(e) => updateRay(ray.id, { distanceM: Number(e.target.value) })}
-                  />
-                </div>
-                <div>
-                  <Label htmlFor={`bw-${ray.id}`}>Beamwidth °</Label>
-                  <Input
-                    id={`bw-${ray.id}`}
-                    type="number"
-                    placeholder="line"
-                    value={ray.beamwidthDeg ?? ""}
-                    onChange={(e) =>
-                      updateRay(ray.id, {
-                        beamwidthDeg: e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-          <Button variant="outline" size="sm" className="w-full" onClick={addRay}>
+            );
+          })}
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full"
+            onClick={() => onRaysChange([...rays, newRay(rays.length)])}
+          >
             <Plus className="mr-1.5 h-3.5 w-3.5" />
             Add azimuth
           </Button>
         </CardContent>
       </Card>
-
-      <Button variant="brand" onClick={onAnalyze} disabled={!origin || analyzing}>
-        {analyzing ? (
-          <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
-        ) : (
-          <Radar className="mr-1.5 h-4 w-4" />
-        )}
-        Analyze obstruction near origin
-      </Button>
     </div>
   );
 }

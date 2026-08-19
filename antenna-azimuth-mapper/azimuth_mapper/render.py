@@ -163,15 +163,15 @@ def render_html(
 
     if shadow_estimate is not None:
         height_txt = (
-            f"{shadow_estimate.estimated_object_height_m:.1f} m"
-            if shadow_estimate.estimated_object_height_m is not None
+            f"{shadow_estimate.reference_height_m:.1f} m"
+            if shadow_estimate.reference_height_m is not None
             else "n/a — sun too low"
         )
         shadow_block = (
             '<div class="shadow-card">'
             f'<span class="pill pill--{shadow_estimate.confidence}">{shadow_estimate.confidence} confidence</span>'
             f'<span class="shadow-card__text">shadow {_format_distance(shadow_estimate.shadow_length_m)} '
-            f"→ est. obstruction height ≈ {height_txt} "
+            f"⇒ reference object ≈ {height_txt} "
             f"({shadow_estimate.angular_error_deg:.0f}° off the expected sun-shadow direction)</span>"
             "</div>"
         )
@@ -180,7 +180,7 @@ def render_html(
             '<div class="shadow-card shadow-card--empty">'
             '<span class="pill pill--none">no shadow</span>'
             '<span class="shadow-card__text">No usable shadow detected near the origin — '
-            "no obstruction-height estimate available.</span>"
+            "no reference height measured here.</span>"
             "</div>"
         )
 

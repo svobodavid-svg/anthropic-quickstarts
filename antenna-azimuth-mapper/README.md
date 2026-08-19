@@ -2,9 +2,9 @@
 
 A small command-line tool — and a Cowork/Claude Code skill built on top of
 it — that plots one or more compass azimuths (e.g. for aiming a directional
-antenna) from a GPS point onto a satellite-image snapshot, and reports a
-best-effort estimate of any obstruction near the line based on shadows
-detected in the image.
+antenna) from a GPS point onto a satellite-image snapshot, and measures a
+reference object's height from its shadow — the quantity needed to calibrate
+how far this imagery leans.
 
 There is no live GPS sensor in a Claude/Cowork session, so coordinates are
 supplied by the user (e.g. pasted from a phone's maps app "share location"
@@ -81,15 +81,22 @@ What it does instead, and what it reports:
    **estimated height** of whatever cast it — flagged with a confidence
    level and how many degrees off the expected shadow direction it was.
 
-That height estimate is genuinely computed from the image and true solar
-geometry, but it is still approximate: the assumed capture date/time may be
-wrong (basemap imagery is typically weeks to years old), the detected blob
-might not be the feature nearest your line of interest, and low sun
-elevation makes the length-to-height conversion noisy. Treat it as a
-"there may be an obstruction of roughly this height near this bearing"
-signal, not a survey-grade figure — and never as a claim about which way an
-object leans in the image, since that direction is not recoverable without
-the sensor's viewing azimuth.
+That height is genuinely computed from the image and true solar geometry,
+but it is approximate: the assumed capture date/time may be wrong (basemap
+imagery is typically weeks to years old), the detected blob might not be the
+object you meant, and low sun elevation makes the length-to-height
+conversion noisy. Entering a known height by hand is more reliable when you
+have one.
+
+**Why the height matters.** A shadow alone cannot tell you which way a tall
+object leans in the image — that needs the satellite's viewing azimuth,
+which no public basemap publishes per tile. But a shadow and a lean are the
+same radial geometry with the sun swapped for the satellite, so once the
+height is known, *measuring* the object's lean yields the viewing geometry,
+and from there any elevated target's bearing can be corrected. This CLI
+supplies the height half; the web app in
+[`../antenna-azimuth-webapp`](../antenna-azimuth-webapp) pairs it with a
+marked base and top to do the correction interactively.
 
 ## Layout
 

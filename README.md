@@ -46,13 +46,13 @@ An autonomous coding agent powered by the Claude Agent SDK. This project demonst
 
 ### Antenna Azimuth Mapper
 
-A Cowork/Claude Code skill and command-line tool that plots compass azimuths (e.g. for aiming a directional antenna) from a GPS point onto a satellite-image snapshot, with a best-effort obstruction-height estimate derived from shadows detected in the image and the true sun position.
+A Cowork/Claude Code skill and command-line tool that plots compass azimuths (e.g. for aiming a directional antenna) from a GPS point onto a satellite-image snapshot, and measures a reference object's height from its shadow and the true sun position.
 
 [Go to Antenna Azimuth Mapper Quickstart](./antenna-azimuth-mapper)
 
 ### Antenna Azimuth Mapper — Web App
 
-The browser-based companion to the Antenna Azimuth Mapper above: a real-time web app that reads your live GPS position and plots azimuths on an interactive satellite map, with the same shadow-based obstruction-height estimate available on demand.
+The browser-based companion to the Antenna Azimuth Mapper above: a real-time web app that reads your live GPS position and plots azimuths on an interactive satellite map, correcting bearings to elevated targets for the angle the imagery was shot from.
 
 [Go to Antenna Azimuth Mapper Web App Quickstart](./antenna-azimuth-webapp)
 

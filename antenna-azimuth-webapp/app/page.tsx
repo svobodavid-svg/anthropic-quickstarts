@@ -1,12 +1,17 @@
 "use client";
 
+import { Check, Link as LinkIcon, Loader2, Radar } from "lucide-react";
 import dynamic from "next/dynamic";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { AzimuthControls, type GpsStatus } from "@/components/AzimuthControls";
+import { CalibrationPanel, type MarkMode } from "@/components/CalibrationPanel";
 import { ShadowReadout } from "@/components/ShadowReadout";
+import { Button } from "@/components/ui/button";
 import { haversineDistanceM, type LatLon } from "@/lib/geometry";
-import type { AzimuthRay, ShadowEstimateResponse } from "@/lib/types";
+import { decodeSession, loadSession, saveSession, shareUrl, type SessionState } from "@/lib/persist";
+import { calibrateFromReference, type ImageryCalibration } from "@/lib/relief";
+import type { AzimuthRay, ShadowProbeResponse } from "@/lib/types";
 
 const AzimuthMap = dynamic(() => import("@/components/AzimuthMap"), { ssr: false });
 
@@ -35,9 +40,33 @@ export default function Home() {
   const [manualOrigin, setManualOrigin] = useState<LatLon | null>(null);
   const [gpsStatus, setGpsStatus] = useState<GpsStatus>("idle");
   const [gpsAccuracyM, setGpsAccuracyM] = useState<number | null>(null);
+  const [headingDeg, setHeadingDeg] = useState<number | null>(null);
   const [rays, setRays] = useState<AzimuthRay[]>(defaultRays);
-  const [shadowEstimate, setShadowEstimate] = useState<ShadowEstimateResponse | null>(null);
-  const [analyzing, setAnalyzing] = useState(false);
+  const [probe, setProbe] = useState<ShadowProbeResponse | null>(null);
+  const [probing, setProbing] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const [markMode, setMarkMode] = useState<MarkMode>("none");
+  const [pickingRayId, setPickingRayId] = useState<string | null>(null);
+  const [calibrationBase, setCalibrationBase] = useState<LatLon | null>(null);
+  const [calibrationTop, setCalibrationTop] = useState<LatLon | null>(null);
+  const [referenceHeightM, setReferenceHeightM] = useState<number | null>(null);
+
+  const restored = useRef(false);
+
+  // Restore from a shared link if present, otherwise from the last session.
+  useEffect(() => {
+    if (restored.current) return;
+    restored.current = true;
+    const fragment = window.location.hash.startsWith("#s=") ? window.location.hash.slice(3) : "";
+    const state = decodeSession(fragment) ?? loadSession();
+    if (!state) return;
+    if (state.rays?.length) setRays(state.rays);
+    if (state.origin) setManualOrigin(state.origin);
+    if (state.calibrationBase) setCalibrationBase(state.calibrationBase);
+    if (state.calibrationTop) setCalibrationTop(state.calibrationTop);
+    if (state.referenceHeightM != null) setReferenceHeightM(state.referenceHeightM);
+  }, []);
 
   useEffect(() => {
     if (typeof navigator === "undefined" || !("geolocation" in navigator)) {
@@ -53,6 +82,9 @@ export default function Home() {
         // Rounded because it's displayed to the metre — keeping the raw float
         // would re-render on every fix even when nothing visibly changed.
         setGpsAccuracyM(Math.round(pos.coords.accuracy));
+        if (pos.coords.heading != null && !Number.isNaN(pos.coords.heading)) {
+          setHeadingDeg(Math.round(pos.coords.heading));
+        }
         setGpsStatus("watching");
       },
       (err) => {
@@ -65,30 +97,99 @@ export default function Home() {
 
   const origin = manualOrigin ?? liveOrigin;
 
+  const calibration: ImageryCalibration | null = useMemo(() => {
+    if (!calibrationBase || !calibrationTop || !referenceHeightM) return null;
+    return calibrateFromReference({
+      base: calibrationBase,
+      top: calibrationTop,
+      heightM: referenceHeightM,
+    });
+  }, [calibrationBase, calibrationTop, referenceHeightM]);
+
+  const sessionState: SessionState = useMemo(
+    () => ({
+      origin,
+      rays,
+      calibration,
+      calibrationBase,
+      calibrationTop,
+      referenceHeightM,
+    }),
+    [origin, rays, calibration, calibrationBase, calibrationTop, referenceHeightM]
+  );
+
+  useEffect(() => {
+    saveSession(sessionState);
+  }, [sessionState]);
+
   const handleUseLiveGps = useCallback(() => setManualOrigin(null), []);
 
-  const handleAnalyze = useCallback(async () => {
-    if (!origin) return;
-    setAnalyzing(true);
+  const handlePick = useCallback(
+    (mode: Exclude<MarkMode, "none">, at: LatLon) => {
+      if (mode === "base") setCalibrationBase(at);
+      else if (mode === "top") setCalibrationTop(at);
+      else if (mode === "target" && pickingRayId) {
+        setRays((prev) =>
+          prev.map((r) =>
+            r.id === pickingRayId ? { ...r, target: { apparent: at, heightM: r.target?.heightM ?? 20 } } : r
+          )
+        );
+        setPickingRayId(null);
+      }
+      setMarkMode("none");
+    },
+    [pickingRayId]
+  );
+
+  const handlePickTarget = useCallback(
+    (rayId: string) => {
+      if (markMode === "target" && pickingRayId === rayId) {
+        setMarkMode("none");
+        setPickingRayId(null);
+      } else {
+        setMarkMode("target");
+        setPickingRayId(rayId);
+      }
+    },
+    [markMode, pickingRayId]
+  );
+
+  const runProbe = useCallback(async () => {
+    const at = calibrationBase ?? origin;
+    if (!at) return;
+    setProbing(true);
     try {
       const resp = await fetch("/api/shadow-estimate", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ lat: origin.lat, lon: origin.lon }),
+        body: JSON.stringify({ lat: at.lat, lon: at.lon }),
       });
-      const data: ShadowEstimateResponse = await resp.json();
-      setShadowEstimate(data);
+      const data: ShadowProbeResponse = await resp.json();
+      setProbe(data);
+      if (data.found && data.referenceHeightM != null && referenceHeightM == null) {
+        setReferenceHeightM(Number(data.referenceHeightM.toFixed(1)));
+      }
     } catch (err) {
-      setShadowEstimate({
+      setProbe({
         found: false,
         sun: { azimuthDeg: 0, elevationDeg: 0 },
         captureDatetime: new Date().toISOString(),
         error: err instanceof Error ? err.message : String(err),
       });
     } finally {
-      setAnalyzing(false);
+      setProbing(false);
     }
-  }, [origin]);
+  }, [calibrationBase, origin, referenceHeightM]);
+
+  const handleCopyLink = useCallback(async () => {
+    try {
+      await navigator.clipboard.writeText(shareUrl(sessionState));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      /* clipboard blocked — nothing useful to say */
+    }
+  }, [sessionState]);
 
   return (
     <main className="flex h-dvh flex-col md:flex-row">
@@ -96,15 +197,48 @@ export default function Home() {
         <AzimuthMap
           origin={origin}
           rays={rays}
-          shadowEstimate={shadowEstimate}
+          shadowProbe={probe}
+          calibration={calibration}
+          calibrationBase={calibrationBase}
+          calibrationTop={calibrationTop}
+          markMode={markMode}
+          onPick={handlePick}
           onOriginMove={setManualOrigin}
         />
       </div>
 
-      <aside className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-border md:h-full md:w-[380px] md:flex-none md:border-l md:border-t-0">
-        <div className="flex-none border-b border-border px-4 py-3">
-          <h1 className="text-sm font-bold uppercase tracking-wide text-brand">Azimuth Mapper</h1>
-          <p className="text-[11px] text-muted-foreground">Live GPS + satellite azimuth plotting</p>
+      <aside className="flex min-h-0 flex-1 flex-col overflow-y-auto border-t border-border md:h-full md:w-[400px] md:flex-none md:border-l md:border-t-0">
+        <div className="flex flex-none items-start justify-between gap-2 border-b border-border px-4 py-3">
+          <div>
+            <h1 className="text-sm font-bold uppercase tracking-wide text-brand">Azimuth Mapper</h1>
+            <p className="text-[11px] text-muted-foreground">
+              Live GPS + satellite azimuth, corrected for imagery lean
+            </p>
+          </div>
+          <Button variant="ghost" size="sm" onClick={handleCopyLink} title="Copy a link to this session">
+            {copied ? <Check className="h-3.5 w-3.5" /> : <LinkIcon className="h-3.5 w-3.5" />}
+          </Button>
+        </div>
+
+        <div className="flex flex-col gap-4 p-4 pb-0">
+          <CalibrationPanel
+            base={calibrationBase}
+            top={calibrationTop}
+            heightM={referenceHeightM}
+            calibration={calibration}
+            markMode={markMode}
+            onMarkModeChange={setMarkMode}
+            onHeightChange={setReferenceHeightM}
+            onClear={() => {
+              setCalibrationBase(null);
+              setCalibrationTop(null);
+              setReferenceHeightM(null);
+              setProbe(null);
+            }}
+            onMeasureShadow={runProbe}
+            probing={probing}
+            probe={probe}
+          />
         </div>
 
         <AzimuthControls
@@ -113,18 +247,29 @@ export default function Home() {
           origin={origin}
           gpsStatus={gpsStatus}
           gpsAccuracyM={manualOrigin ? null : gpsAccuracyM}
+          headingDeg={headingDeg}
           manualOverride={manualOrigin !== null}
           onManualOriginChange={setManualOrigin}
           onUseLiveGps={handleUseLiveGps}
-          onAnalyze={handleAnalyze}
-          analyzing={analyzing}
+          calibration={calibration}
+          markMode={markMode}
+          onPickTarget={handlePickTarget}
+          pickingRayId={pickingRayId}
         />
 
-        {shadowEstimate && (
-          <div className="flex-none px-4 pb-4">
-            <ShadowReadout result={shadowEstimate} />
-          </div>
-        )}
+        <div className="flex-none space-y-3 px-4 pb-4">
+          {!probe && (
+            <Button variant="outline" className="w-full" onClick={runProbe} disabled={!origin || probing}>
+              {probing ? (
+                <Loader2 className="mr-1.5 h-4 w-4 animate-spin" />
+              ) : (
+                <Radar className="mr-1.5 h-4 w-4" />
+              )}
+              Probe imagery for a reference shadow
+            </Button>
+          )}
+          {probe && <ShadowReadout result={probe} onRetry={runProbe} retrying={probing} />}
+        </div>
       </aside>
     </main>
   );

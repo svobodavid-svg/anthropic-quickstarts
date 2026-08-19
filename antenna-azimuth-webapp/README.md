@@ -147,3 +147,22 @@ makes the deployment reachable only by members of the owning team — turn it
 off under *Project Settings → Deployment Protection* if you want the URL to
 be publicly usable (e.g. to open it on a phone that isn't logged into
 Vercel).
+
+### Continuous deployment
+
+`.github/workflows/antenna-azimuth-webapp-deploy.yaml` ships this directory
+to production on every push to `main` that touches it, and can also be run
+by hand from the repository's **Actions** tab (*Run workflow*) — which is
+how to redeploy when nothing under `antenna-azimuth-webapp/` has changed.
+Lint and the Vitest suite run first, so a failing test blocks the deploy.
+
+It needs one repository secret, **`VERCEL_TOKEN`** — create it under
+*Vercel → Account Settings → Tokens*, scoped to the team that owns the
+project, then add it under *GitHub → Settings → Secrets and variables →
+Actions*. The project and team IDs are in the workflow's `env:` block; a
+guard on `github.repository` stops forks from deploying into them, so
+change both values (and the guard) if you run your own copy.
+
+Because this targets an existing Vercel project through the CLI rather than
+linking the repository in the dashboard, it leaves the project's Deployment
+Protection setting alone — a URL that is already public stays public.

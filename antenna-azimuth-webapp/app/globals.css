@@ -64,11 +64,12 @@
   }
 }
 
-/* react-leaflet needs its own stylesheet; kept here so it's picked up
-   without importing leaflet/dist/leaflet.css from multiple client files. */
-@import "leaflet/dist/leaflet.css";
-
-.leaflet-container {
+/* Leaflet's own stylesheet is imported by AzimuthMap.tsx so it ships in that
+   component's chunk and loads with the (dynamically imported) map instead of
+   on first paint. Scoping this override under .map-shell keeps it at a higher
+   specificity than Leaflet's bare .leaflet-container, so it wins regardless of
+   which stylesheet the browser applies last. */
+.map-shell .leaflet-container {
   font-family: var(--font-plex-sans), ui-sans-serif, system-ui, sans-serif;
   background: hsl(var(--background));
 }

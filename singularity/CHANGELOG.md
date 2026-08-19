@@ -25,6 +25,12 @@ versioning is [SemVer](https://semver.org/).
   `api/state.py`). Routes and behaviour identical (all verified live);
   `api/main.py` shrinks from 3702 to 3479 lines. Snapshot stays in main.py for
   now (coupled to the feature-flags singleton).
+- Maintainability refactor (cont.): the NLP / retrieval / text / stats endpoint
+  block (Fáze 34–54, 57 routes, 21 singletons) extracted into four themed
+  routers — `api/routers/{retrieval,nlp,text_ops,stats}.py` — with their
+  singletons moved to `api/state.py`. Routes and behaviour identical (all 194
+  OpenAPI paths preserved; full suite green; endpoints verified live).
+  `api/main.py` shrinks from 3478 to 2734 lines.
 
 ## [1.0.0] — 2026-06-29
 

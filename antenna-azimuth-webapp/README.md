@@ -5,6 +5,8 @@ directional or sector antenna) from your **live browser GPS position** onto
 a satellite map, with a best-effort obstruction-height estimate from
 shadows detected near your position.
 
+**Live demo:** https://antenna-azimuth-webapp.vercel.app
+
 This is the browser-based companion to
 [`../antenna-azimuth-mapper`](../antenna-azimuth-mapper), which is a
 CLI/Cowork-skill version of the same idea for use inside a Claude session
@@ -82,7 +84,8 @@ sensor's viewing azimuth.
 
 ## Deployment
 
-Deployed with Vercel. To deploy your own copy:
+Running live at https://antenna-azimuth-webapp.vercel.app. To deploy your
+own copy:
 
 ```bash
 npx vercel --cwd antenna-azimuth-webapp
@@ -90,3 +93,9 @@ npx vercel --cwd antenna-azimuth-webapp
 
 or connect the repo in the Vercel dashboard with **Root Directory** set to
 `antenna-azimuth-webapp`. No environment variables are required.
+
+Note that Vercel enables **Vercel Authentication** on new projects, which
+makes the deployment reachable only by members of the owning team — turn it
+off under *Project Settings → Deployment Protection* if you want the URL to
+be publicly usable (e.g. to open it on a phone that isn't logged into
+Vercel).

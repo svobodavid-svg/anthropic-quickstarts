@@ -50,6 +50,12 @@ A Cowork/Claude Code skill and command-line tool that plots compass azimuths (e.
 
 [Go to Antenna Azimuth Mapper Quickstart](./antenna-azimuth-mapper)
 
+### Antenna Azimuth Mapper — Web App
+
+The browser-based companion to the Antenna Azimuth Mapper above: a real-time web app that reads your live GPS position and plots azimuths on an interactive satellite map, with the same shadow-based obstruction-height estimate available on demand.
+
+[Go to Antenna Azimuth Mapper Web App Quickstart](./antenna-azimuth-webapp)
+
 ### Managed Agents: Chat SDK
 
 A browser chat app powered by Claude Managed Agents and Vercel's Chat SDK. This project demonstrates how to pair a persistent Managed Agents session per conversation with a chat surface: a research analyst researches with web search and streams its brief token by token while a live feed shows the tool calls. The same handler runs on Slack, Teams, Discord, Telegram, or WhatsApp by swapping the Chat SDK adapter.

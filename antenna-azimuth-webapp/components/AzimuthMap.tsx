@@ -3,7 +3,7 @@
 import "leaflet/dist/leaflet.css";
 
 import L, { type LeafletEventHandlerFnMap } from "leaflet";
-import { Fragment, memo, useEffect, useMemo, useRef } from "react";
+import { Fragment, memo, useEffect, useMemo, useRef, useState } from "react";
 import {
   MapContainer,
   Marker,
@@ -19,10 +19,14 @@ import { bearingBetween, destinationPoint, type LatLon } from "@/lib/geometry";
 import { type ImageryCalibration, correctApparentPosition } from "@/lib/relief";
 import { RAY_COLORS, type AzimuthRay, type ShadowProbeResponse } from "@/lib/types";
 
-const ESRI_WORLD_IMAGERY_URL =
-  "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
-const ESRI_ATTRIBUTION =
-  "Tiles &copy; Esri &mdash; Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community";
+// Our own passthrough proxy (app/api/basemap/[z]/[x]/[y]/route.ts) — the
+// browser never talks to Mapy.cz directly, so the API key never reaches the
+// client. Attribution is fetched from /api/basemap-meta since Mapy.cz's own
+// docs say the required copyright text can change; this fallback only
+// covers the brief window before that fetch resolves.
+const BASEMAP_TILE_URL = "/api/basemap/{z}/{x}/{y}";
+const FALLBACK_ATTRIBUTION = "Map data © Seznam.cz, a.s. and its licensors";
+const FALLBACK_MAX_ZOOM = 19;
 
 function dotIcon(color: string, size: number, opts: { ring?: boolean; grab?: boolean } = {}) {
   const { ring = true, grab = false } = opts;
@@ -138,6 +142,33 @@ function AzimuthMap({
   onPick,
   onOriginMove,
 }: AzimuthMapProps) {
+  // Leaflet's TileLayer has no live setter for attribution/maxZoom, and
+  // react-leaflet only re-applies the `url` prop to an existing layer — so
+  // `loaded` becomes part of the TileLayer's `key` below, forcing a clean
+  // remount once the real values arrive instead of silently no-opping.
+  const [basemapMeta, setBasemapMeta] = useState({
+    attribution: FALLBACK_ATTRIBUTION,
+    maxZoom: FALLBACK_MAX_ZOOM,
+    loaded: false,
+  });
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch("/api/basemap-meta")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data: { attribution?: string; maxZoom?: number } | null) => {
+        if (!cancelled && data?.attribution && data.maxZoom) {
+          setBasemapMeta({ attribution: data.attribution, maxZoom: data.maxZoom, loaded: true });
+        }
+      })
+      .catch(() => {
+        // Fallback attribution/maxZoom already in state — nothing to do.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   // A live GPS watch re-renders this component several times a second, so the
   // per-ray geodesy (and especially the wedge polygons, which are dozens of
   // destinationPoint calls each) is memoised on the values it actually depends
@@ -194,7 +225,12 @@ function AzimuthMap({
         className="h-full w-full"
         scrollWheelZoom
       >
-        <TileLayer url={ESRI_WORLD_IMAGERY_URL} attribution={ESRI_ATTRIBUTION} maxZoom={19} />
+        <TileLayer
+          key={basemapMeta.loaded ? "mapycz-loaded" : "mapycz-fallback"}
+          url={BASEMAP_TILE_URL}
+          attribution={basemapMeta.attribution}
+          maxZoom={basemapMeta.maxZoom}
+        />
         <ScaleControl />
         <RecenterOnFirstFix origin={origin} />
         <ClickCapture markMode={markMode} onPick={onPick} />

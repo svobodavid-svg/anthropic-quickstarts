@@ -84,7 +84,10 @@ export function globalPixelToLonlat(x: number, y: number, zoom: number): LatLon 
 
 /** Pick the smallest zoom whose ground span at least covers 2x the max distance. */
 export function chooseZoomForSpan(distanceM: number, lat: number, targetPx = 640): number {
-  for (let zoom = 19; zoom >= 1; zoom--) {
+  // 20 is Mapy.cz's documented aerial-imagery ceiling (Czech Republic);
+  // deepestAvailableZoom() clamps to whatever the tileset actually reports
+  // and probes downward from there for locations with shallower coverage.
+  for (let zoom = 20; zoom >= 1; zoom--) {
     const spanM = metersPerPixel(lat, zoom) * targetPx;
     if (spanM >= 2 * distanceM) return zoom;
   }

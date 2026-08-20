@@ -1,19 +1,23 @@
 /**
- * Fetch and stitch Esri World Imagery tiles around a point — server-only
+ * Fetch and stitch Mapy.cz aerial-imagery tiles around a point — server-only
  * (uses `sharp` and Node's `fetch`). Ported from
- * antenna-azimuth-mapper/azimuth_mapper/imagery.py.
+ * antenna-azimuth-mapper/azimuth_mapper/imagery.py, which still targets Esri
+ * World Imagery — the two projects intentionally use different providers.
  *
- * Esri's World Imagery basemap needs no API key. It's a mosaic assembled
- * from many source images of different dates and viewing angles, which is
- * exactly why the shadow-based estimate in shadow.ts has to stay a
- * heuristic: there is no single, known capture geometry for a tile.
+ * Mapy.cz's aerial mapset is itself a mosaic assembled from source images of
+ * different dates and viewing angles, which is exactly why the shadow-based
+ * estimate in shadow.ts has to stay a heuristic: there is no single, known
+ * capture geometry for a tile.
  */
 import sharp from "sharp";
 
 import { type LatLon, TILE_SIZE_PX, lonlatToGlobalPixel } from "./geometry";
+import { getAerialTileset, resolveTileUrl } from "./mapycz";
 
-const TILE_URL = (z: number, y: number, x: number) =>
-  `https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+async function tileUrl(z: number, y: number, x: number): Promise<string> {
+  const tileset = await getAerialTileset();
+  return resolveTileUrl(tileset.tileUrlTemplate, z, x, y);
+}
 
 /**
  * Small bounded tile cache.
@@ -35,9 +39,10 @@ async function fetchTile(z: number, y: number, x: number): Promise<Buffer> {
     return hit;
   }
 
-  const resp = await fetch(TILE_URL(z, y, x));
+  const url = await tileUrl(z, y, x);
+  const resp = await fetch(url);
   if (!resp.ok) {
-    throw new Error(`Tile fetch failed (${resp.status}) for ${TILE_URL(z, y, x)}`);
+    throw new Error(`Tile fetch failed (${resp.status}) for z${z}/${x}/${y}`);
   }
   const buf = Buffer.from(await resp.arrayBuffer());
 
@@ -50,18 +55,22 @@ async function fetchTile(z: number, y: number, x: number): Promise<Buffer> {
 }
 
 /**
- * Deepest zoom Esri actually serves at this location, at or below `preferred`.
+ * Deepest zoom Mapy.cz actually serves at this location, at or below
+ * `preferred` (defaulting to the aerial mapset's own documented ceiling).
  *
- * World Imagery reaches z19 in much of the world but stops shallower in
- * places; asking for a level that isn't there returns an error tile, so probe
- * downward instead of failing the request outright.
+ * Mapy.cz's aerial coverage is zoom-limited by country — the whole world
+ * only to z13, Czech Republic to z20, several neighbors to z19 — so asking
+ * for a level that isn't there returns an error tile; probe downward
+ * instead of failing the request outright.
  */
 export async function deepestAvailableZoom(
   center: LatLon,
-  preferred = 19,
-  floor = 15
+  preferred?: number,
+  floor = 12
 ): Promise<number> {
-  for (let zoom = preferred; zoom >= floor; zoom--) {
+  const tileset = await getAerialTileset();
+  const start = Math.min(preferred ?? tileset.maxZoom, tileset.maxZoom);
+  for (let zoom = start; zoom >= floor; zoom--) {
     const [x, y] = lonlatToGlobalPixel(center, zoom);
     const tx = Math.floor(x / TILE_SIZE_PX);
     const ty = Math.floor(y / TILE_SIZE_PX);
@@ -72,7 +81,7 @@ export async function deepestAvailableZoom(
       // Try the next level down.
     }
   }
-  throw new Error(`No Esri imagery available at zoom ${floor}-${preferred} for this location`);
+  throw new Error(`No Mapy.cz aerial imagery available at zoom ${floor}-${start} for this location`);
 }
 
 export interface MapSnapshot {
@@ -86,7 +95,7 @@ export interface MapSnapshot {
   originPx: [number, number];
 }
 
-/** Fetch just enough Esri World Imagery tiles to cover a sizePx square centered on center. */
+/** Fetch just enough Mapy.cz aerial tiles to cover a sizePx square centered on center. */
 export async function fetchSnapshot(
   center: LatLon,
   zoom: number,

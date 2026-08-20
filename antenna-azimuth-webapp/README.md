@@ -19,13 +19,19 @@ tracking straight from your phone or laptop's browser.
 
 ```bash
 cd antenna-azimuth-webapp
+cp .env.example .env.local   # fill in MAPY_CZ_API_KEY
 npm install
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000). No API key or `.env`
-file is needed — satellite imagery comes from Esri's public World Imagery
-basemap.
+Open [http://localhost:3000](http://localhost:3000). Satellite imagery
+comes from the [Mapy.cz REST API](https://developer.mapy.com/rest-api-mapy-cz/)'s
+aerial mapset, which requires an API key — register at api.mapy.cz to get
+one, then set **`MAPY_CZ_API_KEY`** in `.env.local` for local dev and as a
+*Production* environment variable on the Vercel project for the deployed
+app. The key never reaches the browser: the on-screen map is served through
+this app's own `/api/basemap/{z}/{x}/{y}` proxy, and the server-side tile
+fetch used for shadow detection reads the key directly.
 
 **GPS requires HTTPS** (or `localhost`) — `navigator.geolocation` is blocked
 by browsers on a plain-HTTP, non-localhost origin. Local dev on `localhost`
@@ -93,8 +99,8 @@ object; entering a known height by hand is more reliable. A calibration is
 only valid for the patch of imagery it was measured on, since a basemap is a
 mosaic of images from different passes. Ground-level targets need no
 correction at all. And a separate real-world error source this app can't see
-is basemap georeferencing offset — Esri's mosaic can sit several metres off
-in places, which no amount of lean correction fixes.
+is basemap georeferencing offset — the aerial mosaic can sit several metres
+off in places, which no amount of lean correction fixes.
 
 ## Layout
 
@@ -104,15 +110,21 @@ in places, which no amount of lean correction fixes.
 - `lib/relief.ts` — the correction itself: recover the imagery's viewing
   geometry from one reference object, then map an apparent position back to
   its true ground position. Covered by `lib/relief.test.ts`.
-- `components/AzimuthMap.tsx` — a `react-leaflet` map with an Esri World
-  Imagery tile layer, your live GPS marker, the azimuth rays/wedges and the
-  calibration/target markers (all computed client-side).
+- `lib/mapycz.ts` — resolves the Mapy.cz aerial mapset's tile URL template,
+  attribution, and zoom range from its `tiles.json`, rather than hardcoding
+  them (the docs say the attribution text can change). Covered by
+  `lib/mapycz.test.ts`.
+- `components/AzimuthMap.tsx` — a `react-leaflet` map with an aerial tile
+  layer served through this app's own `/api/basemap/{z}/{x}/{y}` proxy (so
+  the Mapy.cz API key never reaches the browser), your live GPS marker, the
+  azimuth rays/wedges and the calibration/target markers (all computed
+  client-side).
 - `app/api/shadow-estimate/route.ts` (Node runtime — needs `sharp`) —
   server-side only, because reading pixel data from a cross-origin tile
   image in the browser would hit canvas CORS tainting: it fetches/stitches
-  Esri tiles, decodes them, and runs the shadow-detection + sun-position
-  heuristic (`lib/shadow.ts`, `lib/tiles.ts` — ported from the CLI's
-  `shadow_detect.py`/`correction.py`/`imagery.py`, since there's no OpenCV
+  Mapy.cz aerial tiles, decodes them, and runs the shadow-detection +
+  sun-position heuristic (`lib/shadow.ts`, `lib/tiles.ts` — ported from the
+  CLI's `shadow_detect.py`/`correction.py`/`imagery.py`, since there's no OpenCV
   here). It only runs on demand, to avoid hammering the public tile endpoint.
 - `app/api/export/route.ts` — renders the current view as a self-contained
   SVG for filing or sending on.

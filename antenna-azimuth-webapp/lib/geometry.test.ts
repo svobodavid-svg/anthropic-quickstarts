@@ -66,7 +66,7 @@ describe("chooseZoomForSpan", () => {
     const distance = 2000;
     const zoom = chooseZoomForSpan(distance, PRAGUE.lat, 640);
     expect(metersPerPixel(PRAGUE.lat, zoom) * 640).toBeGreaterThanOrEqual(2 * distance);
-    if (zoom < 19) {
+    if (zoom < 20) {
       expect(metersPerPixel(PRAGUE.lat, zoom + 1) * 640).toBeLessThan(2 * distance);
     }
   });

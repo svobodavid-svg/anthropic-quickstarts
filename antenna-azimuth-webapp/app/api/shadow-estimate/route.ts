@@ -8,7 +8,9 @@ import { deepestAvailableZoom, fetchSnapshot } from "@/lib/tiles";
 // `sharp` needs native bindings, so this route must run on Node, not Edge.
 export const runtime = "nodejs";
 
-const PREFERRED_ZOOM = 19; // shadows need real resolution to be detectable at all
+// No hardcoded preferred zoom — deepestAvailableZoom() defaults to the
+// aerial mapset's own reported ceiling and probes downward from there;
+// shadows need real resolution to be detectable at all.
 const SNAPSHOT_SIZE_PX = 512;
 
 interface RequestBody {
@@ -49,12 +51,12 @@ export async function POST(req: NextRequest) {
   const sun = solarPosition(lat, lon, dt);
   const base = { sun, captureDatetime: dt.toISOString() };
 
-  // Esri doesn't serve zoom 19 everywhere; fall back to the deepest level that
-  // actually exists here rather than failing the whole request.
+  // Mapy.cz's aerial coverage is zoom-limited by country; fall back to the
+  // deepest level that actually exists here rather than failing the whole request.
   let zoom: number;
   let snapshot;
   try {
-    zoom = await deepestAvailableZoom(origin, PREFERRED_ZOOM);
+    zoom = await deepestAvailableZoom(origin);
     snapshot = await fetchSnapshot(origin, zoom, SNAPSHOT_SIZE_PX);
   } catch (err) {
     return NextResponse.json(

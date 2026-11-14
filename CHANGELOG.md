@@ -1,0 +1,48 @@
+# Changelog
+
+## [1.1.0] - 2026-11-14
+
+### Added
+- Video editor tab running FFmpeg (WebAssembly) in the browser, built around one
+  non-destructive project and a single export:
+  - timeline with multiple clips: add, reorder, split at the playhead, duplicate, delete
+  - per-clip trim, speed (0.5x-2x), rotation, volume and mute
+  - output format: aspect ratio (original, 16:9, 9:16, 1:1, 4:5), fill or fit,
+    resolution from 480p to 4K, platform presets
+  - transitions between clips (fade, dissolve, wipe, slide)
+  - colour filters and effects burned into the export
+  - text layers with position, size, colour and time window
+  - music track with volume and fades, mixed with the original audio
+  - clip from images (slideshow, Ken Burns, morphing) placed on the timeline
+  - undo/redo, keyboard shortcuts (Space, S, Delete, Ctrl+Z, Ctrl+Shift+Z)
+  - cancellable export with progress, result preview and download
+  - fast cut without re-encoding when a single clip is only trimmed
+- "Edit in editor" on generated videos and "Create video" on generated images
+- WebCodecs export engine (Mediabunny) with automatic fallback to FFmpeg
+- Automatic captions from speech (Whisper in the browser)
+- Optional Supabase sign-in for invited users, cloud projects and invitations
+- Project autosave to IndexedDB (timeline and source files survive a reload)
+- Gallery persisted in localStorage; web app manifest and icons
+- FFmpeg core served from the app itself (`public/ffmpeg`, copied on install)
+
+### Changed
+- Interface translated to Czech
+- The editor stays mounted after its first visit so work survives tab switches
+
+### Fixed
+- Removed the `@shadcn/ui@^0.8.0` dependency, which does not exist on npm and made
+  `npm install` fail
+
+## [1.0.0] - 2026-07-06
+
+### Added
+- Initial release of Multimedia Studio
+- Image generation with multiple styles, emotions, and filters
+- Video generation with async processing and status tracking
+- AI chat interface with customizable character profiles
+- Gallery view for organizing generated content
+- Settings panel for API key management and gems tracking
+- Dark theme UI with Tailwind CSS
+- TypeScript support for type safety
+- Zustand store for state management
+- Integration with Promptchan API for all multimedia generation

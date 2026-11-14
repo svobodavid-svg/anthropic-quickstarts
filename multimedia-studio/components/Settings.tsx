@@ -17,12 +17,12 @@ export default function Settings() {
           <div className="text-center mb-6">
             <div className="text-4xl mb-3">🎬</div>
             <h1 className="text-2xl font-bold text-white">Multimedia Studio</h1>
-            <p className="text-slate-400 text-sm mt-2">AI-powered image, video & chat generation</p>
+            <p className="text-slate-400 text-sm mt-2">Generování obrázků, videí a chat s AI, plus videoeditor</p>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-white mb-2">API Key</label>
+              <label className="block text-sm font-medium text-white mb-2">API klíč</label>
               <p className="text-xs text-slate-400 mb-2">
                 Get your API key from{' '}
                 <a
@@ -52,7 +52,7 @@ export default function Settings() {
               disabled={!tempKey.trim()}
               className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white font-semibold py-2 rounded transition-colors"
             >
-              Connect Studio
+              Připojit studio
             </button>
 
             <p className="text-xs text-slate-400 text-center">
@@ -92,11 +92,11 @@ export default function Settings() {
       {showSettings && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
           <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 max-w-md w-full">
-            <h2 className="text-lg font-bold text-white mb-4">Settings</h2>
+            <h2 className="text-lg font-bold text-white mb-4">Nastavení</h2>
 
             <div className="space-y-4 mb-6">
               <div>
-                <label className="block text-sm font-medium text-white mb-2">API Key</label>
+                <label className="block text-sm font-medium text-white mb-2">API klíč</label>
                 <div className="flex gap-2">
                   <input
                     type={showKey ? 'text' : 'password'}
@@ -115,7 +115,7 @@ export default function Settings() {
 
               {gems >= 0 && (
                 <div>
-                  <label className="block text-sm font-medium text-white mb-2">Gems Balance</label>
+                  <label className="block text-sm font-medium text-white mb-2">Zůstatek gemů</label>
                   <div className="px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white flex items-center gap-2">
                     <Gem className="w-4 h-4 text-yellow-400" />
                     <span>{gems}</span>
@@ -134,7 +134,7 @@ export default function Settings() {
                 }}
                 className="flex-1 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded transition-colors"
               >
-                Save
+                Uložit
               </button>
               <button
                 onClick={() => {
@@ -144,7 +144,7 @@ export default function Settings() {
                 className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 rounded transition-colors flex items-center justify-center gap-2"
               >
                 <LogOut className="w-4 h-4" />
-                Logout
+                Odhlásit
               </button>
             </div>
           </div>

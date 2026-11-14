@@ -30,3 +30,9 @@ yarn-error.log*
 *.swp
 *.swo
 *~
+
+# TypeScript
+*.tsbuildinfo
+
+# FFmpeg core copied from node_modules by scripts/copy-ffmpeg-core.mjs
+public/ffmpeg/

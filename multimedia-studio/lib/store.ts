@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 
 export interface ImageItem {
   id: string;
@@ -26,6 +27,8 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export type StudioTab = 'images' | 'videos' | 'editor' | 'chat';
+
 interface StudioStore {
   apiKey: string;
   setApiKey: (key: string) => void;
@@ -46,11 +49,20 @@ interface StudioStore {
   gems: number;
   setGems: (gems: number) => void;
 
-  activeTab: 'images' | 'videos' | 'chat';
-  setActiveTab: (tab: 'images' | 'videos' | 'chat') => void;
+  activeTab: StudioTab;
+  setActiveTab: (tab: StudioTab) => void;
+
+  // Media handed over from the gallery to the video editor.
+  editorVideoUrl: string | null;
+  editorImageUrls: string[];
+  openVideoInEditor: (url: string) => void;
+  openImagesInEditor: (urls: string[]) => void;
+  clearEditorHandoff: () => void;
 }
 
-export const useStudio = create<StudioStore>((set) => ({
+export const useStudio = create<StudioStore>()(
+  persist(
+    (set) => ({
   apiKey: typeof window !== 'undefined' ? localStorage.getItem('promptchan_api_key') || '' : '',
   setApiKey: (key) => {
     set({ apiKey: key });
@@ -80,4 +92,18 @@ export const useStudio = create<StudioStore>((set) => ({
 
   activeTab: 'images',
   setActiveTab: (tab) => set({ activeTab: tab }),
-}));
+
+  editorVideoUrl: null,
+  editorImageUrls: [],
+  openVideoInEditor: (url) => set({ editorVideoUrl: url, activeTab: 'editor' }),
+  openImagesInEditor: (urls) => set({ editorImageUrls: urls, activeTab: 'editor' }),
+  clearEditorHandoff: () => set({ editorVideoUrl: null, editorImageUrls: [] }),
+    }),
+    {
+      name: 'multimedia-studio',
+      // Keep the gallery across reloads. Only links and prompts are stored; the media
+      // itself stays with the provider, so entries can expire there.
+      partialize: (state) => ({ images: state.images, videos: state.videos }),
+    }
+  )
+);

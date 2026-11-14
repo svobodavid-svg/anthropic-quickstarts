@@ -1,0 +1,35 @@
+name: Multimedia Studio image
+
+on:
+  push:
+    branches: [multimedia-studio-video-editor]
+    paths:
+      - "multimedia-studio/**"
+      - ".github/workflows/multimedia-studio-image.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: multimedia-studio
+          push: true
+          tags: |
+            ghcr.io/svobodavid-svg/multimedia-studio:latest
+            ghcr.io/svobodavid-svg/multimedia-studio:${{ github.sha }}
+          # Public values: the Supabase URL and publishable key ship in the client bundle anyway.
+          build-args: |
+            NEXT_PUBLIC_SUPABASE_URL=https://csfgesqdvwsxksdwaekb.supabase.co
+            NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=sb_publishable_3wc_UYbJ-f3zGRAkgzynkA_HPPpo_Qp

@@ -39,7 +39,7 @@ export default function ImageGenerator() {
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
-      setError('Please enter a prompt');
+      setError('Zadejte prompt');
       return;
     }
 
@@ -73,7 +73,7 @@ export default function ImageGenerator() {
         setPrompt('');
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to generate image');
+      setError(err.message || 'Obrázek se nepodařilo vygenerovat');
     } finally {
       setLoading(false);
     }
@@ -81,7 +81,7 @@ export default function ImageGenerator() {
 
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-      <h2 className="text-lg font-bold text-white mb-4">🖼️ Image Generator</h2>
+      <h2 className="text-lg font-bold text-white mb-4">🖼️ Generátor obrázků</h2>
 
       <div className="space-y-4">
         {/* Prompt */}
@@ -90,7 +90,7 @@ export default function ImageGenerator() {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe the image you want to generate..."
+            placeholder="Popište obrázek, který chcete vygenerovat..."
             disabled={loading}
             className="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-400 disabled:opacity-50 resize-none h-24"
           />
@@ -98,7 +98,7 @@ export default function ImageGenerator() {
 
         {/* Style */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Style</label>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Styl</label>
           <select
             value={style}
             onChange={(e) => setStyle(e.target.value)}
@@ -115,7 +115,7 @@ export default function ImageGenerator() {
 
         {/* Emotion */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Emotion</label>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Emoce</label>
           <select
             value={emotion}
             onChange={(e) => setEmotion(e.target.value)}
@@ -132,7 +132,7 @@ export default function ImageGenerator() {
 
         {/* Filter */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Filter</label>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Filtr</label>
           <select
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
@@ -149,7 +149,7 @@ export default function ImageGenerator() {
 
         {/* Quality */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Quality</label>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Kvalita</label>
           <select
             value={quality}
             onChange={(e) => setQuality(e.target.value as 'Ultra' | 'Extreme' | 'Max')}
@@ -157,8 +157,8 @@ export default function ImageGenerator() {
             className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:border-blue-400 disabled:opacity-50"
           >
             <option value="Ultra">Ultra (1 gem)</option>
-            <option value="Extreme">Extreme (2 gems)</option>
-            <option value="Max">Max (3 gems)</option>
+            <option value="Extreme">Extreme (2 gemy)</option>
+            <option value="Max">Max (3 gemy)</option>
           </select>
         </div>
 
@@ -174,12 +174,12 @@ export default function ImageGenerator() {
           {loading ? (
             <>
               <Loader className="w-4 h-4 animate-spin" />
-              Generating...
+              Generuji...
             </>
           ) : (
             <>
               <Zap className="w-4 h-4" />
-              Generate Image
+              Vygenerovat obrázek
             </>
           )}
         </button>

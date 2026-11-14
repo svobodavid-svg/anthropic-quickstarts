@@ -49,7 +49,7 @@ export default function ChatInterface() {
 
       setMessage('');
     } catch (err: any) {
-      setError(err.message || 'Failed to send message');
+      setError(err.message || 'Zprávu se nepodařilo odeslat');
     } finally {
       setLoading(false);
     }
@@ -58,26 +58,26 @@ export default function ChatInterface() {
   if (showSetup) {
     return (
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-6 max-w-2xl mx-auto">
-        <h2 className="text-lg font-bold text-white mb-4">💬 Chat Setup</h2>
+        <h2 className="text-lg font-bold text-white mb-4">💬 Nastavení chatu</h2>
 
         <div className="space-y-4 mb-6">
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Character Name (optional)</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Jméno postavy (volitelné)</label>
             <input
               type="text"
               value={charName}
               onChange={(e) => setCharName(e.target.value)}
-              placeholder="e.g., Luna, Alex, etc."
+              placeholder="např. Luna, Alex"
               className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-400"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-slate-300 mb-2">Personality (optional)</label>
+            <label className="block text-sm font-medium text-slate-300 mb-2">Povaha (volitelné)</label>
             <textarea
               value={charPersonality}
               onChange={(e) => setCharPersonality(e.target.value)}
-              placeholder="Describe the character's personality and traits..."
+              placeholder="Popište povahu a vlastnosti postavy..."
               className="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-400 resize-none h-20"
             />
           </div>
@@ -87,7 +87,7 @@ export default function ChatInterface() {
           onClick={() => setShowSetup(false)}
           className="w-full bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 rounded transition-colors"
         >
-          Start Chatting
+          Začít chat
         </button>
       </div>
     );
@@ -105,7 +105,7 @@ export default function ChatInterface() {
           onClick={() => setShowSetup(true)}
           className="text-xs bg-slate-600 hover:bg-slate-500 text-white px-3 py-1 rounded transition-colors"
         >
-          Change
+          Změnit
         </button>
       </div>
 
@@ -113,7 +113,7 @@ export default function ChatInterface() {
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {chatHistory.length === 0 ? (
           <div className="flex items-center justify-center h-full text-slate-400">
-            <p>Start a conversation...</p>
+            <p>Začněte konverzaci...</p>
           </div>
         ) : (
           chatHistory.map((msg) => (
@@ -150,7 +150,7 @@ export default function ChatInterface() {
                 handleSend();
               }
             }}
-            placeholder="Type your message..."
+            placeholder="Napište zprávu..."
             disabled={loading}
             className="flex-1 px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-400 disabled:opacity-50"
           />

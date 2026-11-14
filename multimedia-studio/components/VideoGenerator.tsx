@@ -69,7 +69,7 @@ export default function VideoGenerator() {
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
-      setError('Please enter a prompt');
+      setError('Zadejte prompt');
       return;
     }
 
@@ -98,7 +98,7 @@ export default function VideoGenerator() {
 
       setPrompt('');
     } catch (err: any) {
-      setError(err.message || 'Failed to submit video');
+      setError(err.message || 'Video se nepodařilo odeslat');
     } finally {
       setLoading(false);
     }
@@ -106,7 +106,7 @@ export default function VideoGenerator() {
 
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
-      <h2 className="text-lg font-bold text-white mb-4">🎥 Video Generator</h2>
+      <h2 className="text-lg font-bold text-white mb-4">🎥 Generátor videí</h2>
 
       <div className="space-y-4">
         {/* Prompt */}
@@ -115,7 +115,7 @@ export default function VideoGenerator() {
           <textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
-            placeholder="Describe the video you want to generate..."
+            placeholder="Popište video, které chcete vygenerovat..."
             disabled={loading}
             className="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-400 disabled:opacity-50 resize-none h-24"
           />
@@ -123,7 +123,7 @@ export default function VideoGenerator() {
 
         {/* Style */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Style</label>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Styl</label>
           <select
             value={style}
             onChange={(e) => setStyle(e.target.value)}
@@ -140,7 +140,7 @@ export default function VideoGenerator() {
 
         {/* Aspect Ratio */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Aspect Ratio</label>
+          <label className="block text-sm font-medium text-slate-300 mb-2">Poměr stran</label>
           <select
             value={aspect}
             onChange={(e) => setAspect(e.target.value as any)}
@@ -166,7 +166,7 @@ export default function VideoGenerator() {
             className="w-4 h-4 rounded"
           />
           <label htmlFor="audioEnabled" className="text-sm font-medium text-slate-300">
-            Enable Audio
+            Se zvukem
           </label>
         </div>
 
@@ -182,12 +182,12 @@ export default function VideoGenerator() {
           {loading ? (
             <>
               <Loader className="w-4 h-4 animate-spin" />
-              Submitting...
+              Odesílám...
             </>
           ) : (
             <>
               <Zap className="w-4 h-4" />
-              Generate Video
+              Vygenerovat video
             </>
           )}
         </button>

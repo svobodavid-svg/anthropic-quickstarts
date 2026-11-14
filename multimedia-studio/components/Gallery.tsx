@@ -2,15 +2,14 @@
 
 import { useState } from 'react';
 import { useStudio } from '@/lib/store';
-import { Download, Loader, Play } from 'lucide-react';
-import Image from 'next/image';
+import { Download, Film, Play, Scissors } from 'lucide-react';
 
 interface GalleryProps {
   type: 'images' | 'videos';
 }
 
 export default function Gallery({ type }: GalleryProps) {
-  const { images, videos, clearImages, clearVideos } = useStudio();
+  const { images, videos, clearImages, clearVideos, openVideoInEditor, openImagesInEditor } = useStudio();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const items = type === 'images' ? images : videos;
@@ -19,7 +18,9 @@ export default function Gallery({ type }: GalleryProps) {
     return (
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-12 text-center">
         <div className="text-4xl mb-3">{type === 'images' ? '🖼️' : '🎥'}</div>
-        <p className="text-slate-400">No {type} yet. Create some to see them here!</p>
+        <p className="text-slate-400">
+          {type === 'images' ? 'Zatím žádné obrázky.' : 'Zatím žádná videa.'} Vygenerujte první a objeví se tady.
+        </p>
       </div>
     );
   }
@@ -29,14 +30,26 @@ export default function Gallery({ type }: GalleryProps) {
       {/* Header */}
       <div className="bg-slate-700 p-4 border-b border-slate-600 flex items-center justify-between">
         <h2 className="text-lg font-bold text-white">
-          {type === 'images' ? '🖼️ Generated Images' : '🎥 Generated Videos'} ({items.length})
+          {type === 'images' ? '🖼️ Vygenerované obrázky' : '🎥 Vygenerovaná videa'} ({items.length})
         </h2>
-        <button
-          onClick={() => (type === 'images' ? clearImages() : clearVideos())}
-          className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition-colors"
-        >
-          Clear
-        </button>
+        <div className="flex items-center gap-2">
+          {type === 'images' && images.length >= 2 && (
+            <button
+              onClick={() => openImagesInEditor(images.map((image) => image.url))}
+              className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded transition-colors"
+              title="Vytvořit z obrázků video v editoru"
+            >
+              <Film className="w-3 h-3" />
+              Vytvořit video
+            </button>
+          )}
+          <button
+            onClick={() => (type === 'images' ? clearImages() : clearVideos())}
+            className="text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded transition-colors"
+          >
+            Vymazat
+          </button>
+        </div>
       </div>
 
       {/* Items Grid */}
@@ -68,9 +81,9 @@ export default function Gallery({ type }: GalleryProps) {
                       }`}
                     >
                       {item.status === 'completed'
-                        ? 'Ready'
+                        ? 'Hotovo'
                         : item.status === 'failed'
-                        ? 'Failed'
+                        ? 'Chyba'
                         : `${item.progress || 0}%`}
                     </span>
                   </div>
@@ -90,15 +103,28 @@ export default function Gallery({ type }: GalleryProps) {
                       <Download className="w-4 h-4" />
                     </a>
                   ) : item.status === 'completed' && item.urls ? (
-                    <a
-                      href={item.urls[0]}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Play className="w-4 h-4" />
-                    </a>
+                    <>
+                      <a
+                        href={item.urls[0]}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Přehrát"
+                      >
+                        <Play className="w-4 h-4" />
+                      </a>
+                      <button
+                        className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openVideoInEditor(item.urls[0]);
+                        }}
+                        title="Upravit v editoru"
+                      >
+                        <Scissors className="w-4 h-4" />
+                      </button>
+                    </>
                   ) : null}
                 </div>
               )}

@@ -9,6 +9,7 @@ import VideoGenerator from '@/components/VideoGenerator';
 import ChatInterface from '@/components/ChatInterface';
 import Gallery from '@/components/Gallery';
 import AuthGate from '@/components/AuthGate';
+import { usePromptchan } from '@/hooks/usePromptchan';
 
 // FFmpeg (WebAssembly + Web Worker) only runs in the browser.
 const VideoEditor = dynamic(() => import('@/components/VideoEditor'), { ssr: false });
@@ -17,6 +18,7 @@ function Studio() {
   const [mounted, setMounted] = useState(false);
   const [editorOpened, setEditorOpened] = useState(false);
   const { activeTab, setActiveTab, apiKey } = useStudio();
+  usePromptchan();
 
   useEffect(() => {
     setMounted(true);

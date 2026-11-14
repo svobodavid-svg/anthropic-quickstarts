@@ -2,11 +2,11 @@
 
 import { useState } from 'react';
 import { useStudio } from '@/lib/store';
-import { createClient } from '@/lib/promptchan-client';
+import { createClient, describeError } from '@/lib/promptchan-client';
 import { Loader, Send } from 'lucide-react';
 
 export default function ChatInterface() {
-  const { apiKey, chatHistory, addChatMessage } = useStudio();
+  const { apiKey, chatHistory, addChatMessage, setGems } = useStudio();
   const [message, setMessage] = useState('');
   const [charName, setCharName] = useState('');
   const [charPersonality, setCharPersonality] = useState('');
@@ -22,16 +22,21 @@ export default function ChatInterface() {
 
     try {
       const client = createClient(apiKey);
+      // The API requires a full character profile; unset fields get neutral defaults.
       const result = await client.chat({
         message,
-        characterData: charName
-          ? {
-              name: charName,
-              personality: charPersonality,
-            }
-          : undefined,
-        chatHistory,
+        isRoleplay: false,
+        characterData: {
+          name: charName.trim() || 'Asistent',
+          personality: charPersonality.trim() || 'Přátelská, vstřícná',
+          scenario: 'Neformální rozhovor',
+          sexuality: 'Straight',
+          openness: 1,
+          emotions: 1,
+        },
+        chatHistory: chatHistory.map(({ role, content }) => ({ role, content })),
       });
+      if (typeof result.gems === 'number') setGems(result.gems);
 
       addChatMessage({
         id: Math.random().toString(36).substr(2, 9),
@@ -49,7 +54,7 @@ export default function ChatInterface() {
 
       setMessage('');
     } catch (err: any) {
-      setError(err.message || 'Zprávu se nepodařilo odeslat');
+      setError(describeError(err));
     } finally {
       setLoading(false);
     }
@@ -99,7 +104,7 @@ export default function ChatInterface() {
       <div className="bg-slate-700 p-4 border-b border-slate-600 flex items-center justify-between">
         <div>
           <h2 className="text-lg font-bold text-white">Chat</h2>
-          {charName && <p className="text-sm text-slate-400">Chatting with {charName}</p>}
+          {charName && <p className="text-sm text-slate-400">Chat s postavou {charName}</p>}
         </div>
         <button
           onClick={() => setShowSetup(true)}

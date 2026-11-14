@@ -1,171 +1,231 @@
 'use client';
 
-import { useState } from 'react';
-import { useStudio } from '@/lib/store';
-import { createClient } from '@/lib/promptchan-client';
+import { useEffect, useMemo, useState } from 'react';
 import { Loader, Zap } from 'lucide-react';
+import { createClient, describeError, type Aspect, type CatalogImageModel } from '@/lib/promptchan-client';
+import { useStudio } from '@/lib/store';
 
-const STYLES = [
-  'Cinematic',
-  'Anime',
-  'Hyperreal',
-  'Photo XL+',
-  'Hyperreal XL+',
-  'Render XL+',
-  'Anime XL',
-  'Cinematic XL',
-];
+/** Used until the catalog loads, or when it cannot be loaded. */
+const FALLBACK_MODELS: CatalogImageModel[] = ['Hyperreal XL+', 'Photo XL+', 'Cinematic XL', 'Anime XL', 'Cinematic'].map(
+  (name) => ({
+    name,
+    engine: 'standard',
+    min_plan: 'Free',
+    allowed: true,
+    available: true,
+    qualities: ['Ultra', 'Extreme', 'Max'],
+    aspects: ['Portrait', 'Wide', 'Square'],
+    max_images: 1,
+    character_versions: [],
+    filters: ['Default'],
+  })
+);
 
-const EMOTIONS = [
-  'Default',
-  'Smiling',
-  'Laughing',
-  'Angry',
-  'Scared',
-  'Orgasm Face',
-];
+const ASPECT_LABEL: Record<Aspect, string> = { Portrait: 'Na výšku', Wide: 'Na šířku', Square: 'Čtverec' };
 
-const FILTERS = ['Default', 'Cinematic', 'Studio', 'Noir Movie', 'VHS', 'Pixel Art'];
+const fieldClass =
+  'w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:border-blue-400 disabled:opacity-50';
+const labelClass = 'block text-sm font-medium text-slate-300 mb-2';
 
 export default function ImageGenerator() {
-  const { apiKey, addImage, setGems } = useStudio();
+  const { apiKey, addImage, setGems, catalog } = useStudio();
+  const models = useMemo(
+    () => (catalog?.image_models?.length ? catalog.image_models : FALLBACK_MODELS),
+    [catalog]
+  );
+
   const [prompt, setPrompt] = useState('');
-  const [style, setStyle] = useState('Cinematic');
-  const [emotion, setEmotion] = useState('Default');
+  const [negativePrompt, setNegativePrompt] = useState('');
+  const [modelName, setModelName] = useState('');
+  const [pose, setPose] = useState('Default');
   const [filter, setFilter] = useState('Default');
-  const [quality, setQuality] = useState<'Ultra' | 'Extreme' | 'Max'>('Ultra');
+  const [emotion, setEmotion] = useState('Default');
+  const [quality, setQuality] = useState('');
+  const [aspect, setAspect] = useState<Aspect>('Portrait');
+  const [count, setCount] = useState(1);
+  const [save, setSave] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const usable = (model: CatalogImageModel) => model.allowed && model.available;
+  const model = models.find((m) => m.name === modelName) ?? models.find(usable) ?? models[0];
+  const poses = catalog?.poses?.[model.engine] ?? ['Default'];
+  const emotions = catalog?.emotions ?? ['Default'];
+
+  // Keep the dependent choices valid when the model changes.
+  useEffect(() => {
+    if (!model.filters.includes(filter)) setFilter(model.filters[0] ?? 'Default');
+    // Always start from the model's base quality so a switch never adds Gems unasked.
+    setQuality(model.qualities[0] ?? '');
+    if (!model.aspects.includes(aspect)) setAspect(model.aspects[0] ?? 'Portrait');
+    if (!poses.includes(pose)) setPose('Default');
+    if (count > model.max_images) setCount(1);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [model.name]);
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
       setError('Zadejte prompt');
       return;
     }
-
     setLoading(true);
     setError('');
 
     try {
-      const client = createClient(apiKey);
-      const result = await client.generateImage({
-        prompt,
-        style,
-        emotion,
+      const result = await createClient(apiKey).generateImage({
+        model: model.name,
+        prompt: prompt.trim(),
+        ...(negativePrompt.trim() ? { negative_prompt: negativePrompt.trim() } : {}),
+        poses: [pose],
         filter,
-        quality,
-        image_size: '768x512',
+        emotion,
+        ...(quality ? { quality } : {}),
+        aspect,
+        ...(count > 1 ? { count } : {}),
+        ...(save ? { save_to_gallery: true } : {}),
       });
 
-      if (result.image) {
+      // Saved images come back as links, the others inline.
+      const urls = result.image_urls?.length
+        ? result.image_urls
+        : (result.images?.length ? result.images : result.image ? [result.image] : []).map(
+            (data) => `data:image/jpeg;base64,${data}`
+          );
+
+      urls.forEach((url, i) =>
         addImage({
-          id: Math.random().toString(36).substr(2, 9),
-          url: `data:image/png;base64,${result.image}`,
-          prompt,
+          id: `${Date.now()}-${i}`,
+          url,
+          prompt: prompt.trim(),
           timestamp: Date.now(),
-          params: { style, emotion, filter, quality },
-        });
-
-        if (result.gems !== undefined) {
-          setGems(result.gems);
-        }
-
-        setPrompt('');
-      }
-    } catch (err: any) {
-      setError(err.message || 'Obrázek se nepodařilo vygenerovat');
+          params: { model: result.model, pose, filter, emotion, quality, aspect, seed: result.seed },
+          imageId: result.image_ids?.[i],
+          saved: result.saved,
+        })
+      );
+      if (typeof result.gems === 'number') setGems(result.gems);
+      if (urls.length === 0) setError('Služba nevrátila žádný obrázek.');
+    } catch (err) {
+      setError(describeError(err));
     } finally {
       setLoading(false);
     }
   };
+
+  const select = (
+    id: string,
+    label: string,
+    value: string,
+    onChange: (value: string) => void,
+    options: { value: string; label: string; disabled?: boolean }[]
+  ) => (
+    <div>
+      <label htmlFor={id} className={labelClass}>
+        {label}
+      </label>
+      <select id={id} value={value} onChange={(e) => onChange(e.target.value)} disabled={loading} className={fieldClass}>
+        {options.map((option) => (
+          <option key={option.value} value={option.value} disabled={option.disabled}>
+            {option.label}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
 
   return (
     <div className="bg-slate-800 border border-slate-700 rounded-lg p-6">
       <h2 className="text-lg font-bold text-white mb-4">🖼️ Generátor obrázků</h2>
 
       <div className="space-y-4">
-        {/* Prompt */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Prompt</label>
+          <label htmlFor="image-prompt" className={labelClass}>
+            Prompt
+          </label>
           <textarea
+            id="image-prompt"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             placeholder="Popište obrázek, který chcete vygenerovat..."
+            maxLength={4000}
             disabled={loading}
-            className="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded text-white placeholder-slate-500 focus:outline-none focus:border-blue-400 disabled:opacity-50 resize-none h-24"
+            className={`${fieldClass} py-3 resize-none h-24 placeholder-slate-500`}
           />
         </div>
 
-        {/* Style */}
         <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Styl</label>
-          <select
-            value={style}
-            onChange={(e) => setStyle(e.target.value)}
+          <label htmlFor="image-negative" className={labelClass}>
+            Čemu se vyhnout (volitelné)
+          </label>
+          <input
+            id="image-negative"
+            type="text"
+            value={negativePrompt}
+            onChange={(e) => setNegativePrompt(e.target.value)}
+            maxLength={4000}
             disabled={loading}
-            className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:border-blue-400 disabled:opacity-50"
-          >
-            {STYLES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
+            className={fieldClass}
+          />
         </div>
 
-        {/* Emotion */}
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Emoce</label>
-          <select
-            value={emotion}
-            onChange={(e) => setEmotion(e.target.value)}
-            disabled={loading}
-            className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:border-blue-400 disabled:opacity-50"
-          >
-            {EMOTIONS.map((e) => (
-              <option key={e} value={e}>
-                {e}
-              </option>
-            ))}
-          </select>
+        {select(
+          'image-model',
+          'Model',
+          model.name,
+          setModelName,
+          models.map((m) => ({
+            value: m.name,
+            label: !m.allowed ? `${m.name} (tarif ${m.min_plan})` : !m.available ? `${m.name} (teď nedostupný)` : m.name,
+            disabled: !usable(m),
+          }))
+        )}
+
+        <div className="grid grid-cols-2 gap-4">
+          {select('image-pose', 'Póza', pose, setPose, poses.map((p) => ({ value: p, label: p })))}
+          {select('image-filter', 'Filtr', filter, setFilter, model.filters.map((f) => ({ value: f, label: f })))}
+          {select('image-emotion', 'Výraz', emotion, setEmotion, emotions.map((e) => ({ value: e, label: e })))}
+          {select(
+            'image-aspect',
+            'Poměr stran',
+            aspect,
+            (value) => setAspect(value as Aspect),
+            model.aspects.map((a) => ({ value: a, label: ASPECT_LABEL[a] ?? a }))
+          )}
+          {model.qualities.length > 0 &&
+            select('image-quality', 'Kvalita', quality, setQuality, model.qualities.map((q) => ({ value: q, label: q })))}
+          {model.max_images > 1 &&
+            select(
+              'image-count',
+              'Počet obrázků',
+              String(count),
+              (value) => setCount(Number(value)),
+              Array.from({ length: model.max_images }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))
+            )}
         </div>
 
-        {/* Filter */}
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Filtr</label>
-          <select
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+        <label className="flex items-start gap-2 text-sm text-slate-300">
+          <input
+            type="checkbox"
+            checked={save}
+            onChange={(e) => setSave(e.target.checked)}
             disabled={loading}
-            className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:border-blue-400 disabled:opacity-50"
-          >
-            {FILTERS.map((f) => (
-              <option key={f} value={f}>
-                {f}
-              </option>
-            ))}
-          </select>
-        </div>
+            className="mt-0.5 w-4 h-4 rounded"
+          />
+          <span>
+            Uložit do galerie na Promptchanu
+            <span className="block text-xs text-slate-400">
+              Jen placené tarify. Uložený obrázek jde potom rozpohybovat ve videu a zůstane v galerii studia i po
+              obnovení stránky.
+            </span>
+          </span>
+        </label>
 
-        {/* Quality */}
-        <div>
-          <label className="block text-sm font-medium text-slate-300 mb-2">Kvalita</label>
-          <select
-            value={quality}
-            onChange={(e) => setQuality(e.target.value as 'Ultra' | 'Extreme' | 'Max')}
-            disabled={loading}
-            className="w-full px-4 py-2 bg-slate-900 border border-slate-600 rounded text-white focus:outline-none focus:border-blue-400 disabled:opacity-50"
-          >
-            <option value="Ultra">Ultra (1 gem)</option>
-            <option value="Extreme">Extreme (2 gemy)</option>
-            <option value="Max">Max (3 gemy)</option>
-          </select>
-        </div>
+        {error && (
+          <div role="alert" className="p-3 bg-red-900/50 border border-red-700 rounded text-red-200 text-sm">
+            {error}
+          </div>
+        )}
 
-        {/* Error */}
-        {error && <div className="p-3 bg-red-900/50 border border-red-700 rounded text-red-200 text-sm">{error}</div>}
-
-        {/* Generate Button */}
         <button
           onClick={handleGenerate}
           disabled={loading || !prompt.trim()}

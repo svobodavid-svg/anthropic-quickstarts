@@ -2,15 +2,38 @@
 
 import { useState } from 'react';
 import { useStudio } from '@/lib/store';
-import { Download, Film, Play, Scissors } from 'lucide-react';
+import { Download, FastForward, Film, Play, Scissors, Sparkles } from 'lucide-react';
+import { createClient, describeError } from '@/lib/promptchan-client';
 
 interface GalleryProps {
   type: 'images' | 'videos';
 }
 
 export default function Gallery({ type }: GalleryProps) {
-  const { images, videos, clearImages, clearVideos, openVideoInEditor, openImagesInEditor } = useStudio();
+  const { apiKey, images, videos, addVideo, clearImages, clearVideos, openVideoInEditor, openImagesInEditor, animateImage } =
+    useStudio();
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [notice, setNotice] = useState('');
+
+  /** Continue a finished video by about six seconds; the new part arrives as its own video. */
+  const handleExtend = async (item: { videoId?: string; prompt: string }) => {
+    if (!item.videoId) return;
+    setNotice('');
+    try {
+      const result = await createClient(apiKey).extendVideo({ video_id: item.videoId, mode: 'continue' });
+      addVideo({
+        id: `${Date.now()}`,
+        requestId: result.request_id,
+        prompt: `Pokračování: ${item.prompt}`,
+        timestamp: Date.now(),
+        status: 'pending',
+        progress: 0,
+        params: { extend: item.videoId },
+      });
+    } catch (err) {
+      setNotice(describeError(err));
+    }
+  };
 
   const items = type === 'images' ? images : videos;
 
@@ -52,6 +75,12 @@ export default function Gallery({ type }: GalleryProps) {
         </div>
       </div>
 
+      {notice && (
+        <div role="alert" className="m-4 mb-0 p-3 bg-red-900/50 border border-red-700 rounded text-red-200 text-sm">
+          {notice}
+        </div>
+      )}
+
       {/* Items Grid */}
       <div className="flex-1 overflow-y-auto p-4">
         <div className="grid grid-cols-2 gap-3">
@@ -84,7 +113,9 @@ export default function Gallery({ type }: GalleryProps) {
                         ? 'Hotovo'
                         : item.status === 'failed'
                         ? 'Chyba'
-                        : `${item.progress || 0}%`}
+                        : item.queuePosition
+                        ? `Ve frontě: ${item.queuePosition}`
+                        : `${Math.round((item.progress || 0) * 100)}%`}
                     </span>
                   </div>
                 </div>
@@ -94,14 +125,29 @@ export default function Gallery({ type }: GalleryProps) {
               {selectedId === item.id && (
                 <div className="absolute inset-0 bg-black/50 rounded flex items-center justify-center gap-2">
                   {type === 'images' ? (
-                    <a
-                      href={item.url}
-                      download={`image-${item.id}.png`}
-                      className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <Download className="w-4 h-4" />
-                    </a>
+                    <>
+                      <a
+                        href={item.url}
+                        download={`image-${item.id}.jpg`}
+                        className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+                        onClick={(e) => e.stopPropagation()}
+                        title="Stáhnout"
+                      >
+                        <Download className="w-4 h-4" />
+                      </a>
+                      {item.saved && item.imageId && (
+                        <button
+                          className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            animateImage(item.imageId);
+                          }}
+                          title="Rozpohybovat ve videu"
+                        >
+                          <Sparkles className="w-4 h-4" />
+                        </button>
+                      )}
+                    </>
                   ) : item.status === 'completed' && item.urls ? (
                     <>
                       <a
@@ -124,6 +170,18 @@ export default function Gallery({ type }: GalleryProps) {
                       >
                         <Scissors className="w-4 h-4" />
                       </button>
+                      {item.videoId && (
+                        <button
+                          className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleExtend(item);
+                          }}
+                          title="Prodloužit o cca 6 s (15 gemů a víc)"
+                        >
+                          <FastForward className="w-4 h-4" />
+                        </button>
+                      )}
                     </>
                   ) : null}
                 </div>
@@ -133,6 +191,7 @@ export default function Gallery({ type }: GalleryProps) {
               {selectedId === item.id && (
                 <div className="absolute bottom-full left-0 right-0 mb-2 p-2 bg-slate-900 border border-slate-600 rounded text-xs text-slate-200 z-10 max-h-20 overflow-y-auto">
                   {item.prompt}
+                  {item.failureReason && <span className="block text-red-300">{item.failureReason}</span>}
                 </div>
               )}
             </div>

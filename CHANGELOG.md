@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.0] - 2026-11-14
+
+### Changed
+- Promptchan client rewritten for API v2.1: video requests go to the video host
+  (`film.aicloudnetservices.com`) and carry `video_model`; images use `model` instead of
+  the deprecated `style`
+- Image and video forms are built from the account's catalog (models, poses, filters,
+  expressions, qualities, video options)
+- Video progress is followed studio-wide and read as a 0-1 fraction
+
+### Added
+- Account plan and Gems balance, spoken video (v4-voice), animating a saved image,
+  extending a finished video, saving images to the Promptchan gallery
+- Czech messages for API error codes
+
+### Fixed
+- Inline (base64) images are no longer written to localStorage, which they overflowed
+
 ## [1.1.0] - 2026-11-14
 
 ### Added

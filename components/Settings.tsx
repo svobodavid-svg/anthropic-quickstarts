@@ -5,7 +5,7 @@ import { useStudio } from '@/lib/store';
 import { Settings as SettingsIcon, LogOut, Gem } from 'lucide-react';
 
 export default function Settings() {
-  const { apiKey, setApiKey, gems } = useStudio();
+  const { apiKey, setApiKey, gems, account } = useStudio();
   const [showSettings, setShowSettings] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
   const [showKey, setShowKey] = useState(false);
@@ -79,6 +79,7 @@ export default function Settings() {
           <div className="flex items-center gap-2 px-3 py-1 bg-slate-700 rounded text-sm">
             <Gem className="w-4 h-4 text-yellow-400" />
             <span className="text-white font-semibold">{gems}</span>
+            {account?.plan && <span className="text-slate-400">· {account.plan}</span>}
           </div>
         )}
         <button

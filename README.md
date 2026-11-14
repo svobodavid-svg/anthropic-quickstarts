@@ -128,6 +128,15 @@ Each image/video generation costs gems:
 
 MIT
 
+## Promptchan API
+
+`lib/promptchan-client.ts` targets Promptchan API v2.1. Images, chat, the catalog and the
+account are served from `prod.aicloudnetservices.com`; every video endpoint from
+`film.aicloudnetservices.com`. The forms read `GET /api/external/catalog`, so they offer
+exactly the models and options the signed-in key can use. Requests go straight from the
+browser with the key from Settings. `Idempotency-Key` is not sent: it is unverified whether
+the API accepts that header from a browser.
+
 ## Video Editor
 
 The **Editor** tab is a small non-linear editor. Media is processed locally in the

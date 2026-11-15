@@ -84,6 +84,11 @@ interface StudioStore {
   catalog: Catalog | null;
   setCatalog: (catalog: Catalog | null) => void;
   account: Account | null;
+  /** Why the account could not be loaded, shown next to the balance. */
+  accountError: string | null;
+  setAccountError: (e: string | null) => void;
+  accountReload: number;
+  reloadAccount: () => void;
   setAccount: (account: Account | null) => void;
 
   /** Saved image picked in the gallery to be animated in the video form. */
@@ -157,6 +162,10 @@ export const useStudio = create<StudioStore>()(
   catalog: null,
   setCatalog: (catalog) => set({ catalog }),
   account: null,
+  accountError: null,
+  setAccountError: (e) => set({ accountError: e }),
+  accountReload: 0,
+  reloadAccount: () => set((state) => ({ accountReload: state.accountReload + 1 })),
   setAccount: (account) => set(account ? { account, gems: account.gems } : { account }),
 
   characterImageId: null,

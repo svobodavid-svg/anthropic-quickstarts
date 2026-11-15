@@ -5,7 +5,7 @@ import { useStudio } from '@/lib/store';
 import { Settings as SettingsIcon, LogOut, Gem } from 'lucide-react';
 
 export default function Settings() {
-  const { apiKey, setApiKey, gems, account } = useStudio();
+  const { apiKey, setApiKey, gems, account, accountError, reloadAccount } = useStudio();
   const [showSettings, setShowSettings] = useState(false);
   const [tempKey, setTempKey] = useState(apiKey);
   const [showKey, setShowKey] = useState(false);
@@ -75,6 +75,15 @@ export default function Settings() {
   return (
     <>
       <div className="flex items-center gap-3">
+        {accountError && (
+          <button
+            onClick={reloadAccount}
+            title={`${accountError}. Klepnutím načíst znovu.`}
+            className="px-3 py-1 bg-red-900/60 border border-red-700 rounded text-xs text-red-100"
+          >
+            Účet nenačten: {accountError}
+          </button>
+        )}
         {gems > 0 && (
           <div className="flex items-center gap-2 px-3 py-1 bg-slate-700 rounded text-sm">
             <Gem className="w-4 h-4 text-yellow-400" />
@@ -119,8 +128,16 @@ export default function Settings() {
                   <label className="block text-sm font-medium text-white mb-2">Zůstatek gemů</label>
                   <div className="px-3 py-2 bg-slate-900 border border-slate-600 rounded text-white flex items-center gap-2">
                     <Gem className="w-4 h-4 text-yellow-400" />
-                    <span>{gems}</span>
+                    <span>{account ? gems : '—'}</span>
                   </div>
+                  {accountError && (
+                    <p className="text-xs text-red-300 mt-1">
+                      Zůstatek se nenačetl: {accountError}{' '}
+                      <button onClick={reloadAccount} className="underline">
+                        Zkusit znovu
+                      </button>
+                    </p>
+                  )}
                 </div>
               )}
             </div>

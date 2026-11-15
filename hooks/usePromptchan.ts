@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { createClient } from '@/lib/promptchan-client';
+import { createClient, describeError } from '@/lib/promptchan-client';
 import { useStudio } from '@/lib/store';
 import { saveToCloud, signedGalleryUrl } from '@/lib/cloudGallery';
 
@@ -14,6 +14,8 @@ export const usePromptchan = () => {
   const apiKey = useStudio((state) => state.apiKey);
   const setCatalog = useStudio((state) => state.setCatalog);
   const setAccount = useStudio((state) => state.setAccount);
+  const setAccountError = useStudio((state) => state.setAccountError);
+  const accountReload = useStudio((state) => state.accountReload);
   const updateVideo = useStudio((state) => state.updateVideo);
   const setGems = useStudio((state) => state.setGems);
   const hasActiveVideos = useStudio((state) =>
@@ -26,11 +28,22 @@ export const usePromptchan = () => {
     const client = createClient(apiKey);
     // Either call may fail (offline, bad key); the forms fall back to built-in lists.
     client.getCatalog().then((catalog) => active && setCatalog(catalog)).catch(() => active && setCatalog(null));
-    client.getAccount().then((account) => active && setAccount(account)).catch(() => active && setAccount(null));
+    client
+      .getAccount()
+      .then((account) => {
+        if (!active) return;
+        setAccount(account);
+        setAccountError(null);
+      })
+      .catch((err) => {
+        if (!active) return;
+        setAccount(null);
+        setAccountError(describeError(err));
+      });
     return () => {
       active = false;
     };
-  }, [apiKey, setCatalog, setAccount]);
+  }, [apiKey, accountReload, setCatalog, setAccount, setAccountError]);
 
   // Cloud copies carry week-long signed links: renew them on every start.
   useEffect(() => {

@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.1] - 2026-11-15
+
+### Fixed
+- Zůstatek gemů: když se účet nenačte, studio ukáže důvod a tlačítko „Zkusit znovu“ (dřív tiše zobrazilo 0).
+
 ## [1.5.0] - 2026-11-15
 
 ### Added

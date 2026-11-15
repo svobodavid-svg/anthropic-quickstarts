@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.5.0] - 2026-11-15
+
+### Added
+- Agent: nástroje `await_videos` (čeká na hotová videa) a `open_in_editor` (otevře výsledek ve zvoleném formátu); uložené šablony cílů; odhad gemů a potvrzení před během.
+- Galerie: ukládání kopií do soukromého cloudu (volitelně automaticky u videí, odkazy se obnovují), hvězdička „nejlepší“ s filtrem Výběr, volba formátu editoru (Reels, YouTube, 4:5, 1:1).
+- Dávkové generování obrázků (jeden prompt na řádek) s kontrolou odhadu gemů.
+- Knihovna pojmenovaných AI postav.
+- Editor: efekt „Vylepšit (odšum + ostrost)“ a předvolba „Upscale 4K + vylepšení“ (lokálně, bez gemů).
+
 ## [1.4.0] - 2026-11-15
 
 ### Added

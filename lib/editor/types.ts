@@ -150,6 +150,7 @@ export const EFFECTS: Effect[] = [
   { id: "vignette", name: "Vinětace", css: "", ffmpeg: "vignette=PI/4.5" },
   { id: "grain", name: "Zrno", css: "", ffmpeg: "noise=alls=16:allf=t" },
   { id: "rgbshift", name: "RGB posun", css: "", ffmpeg: "rgbashift=rh=-6:bh=6" },
+  { id: "enhance", name: "Vylepšit (odšum + ostrost)", css: "contrast(1.03)", ffmpeg: "hqdn3d=1.5:1.5:6:6,unsharp=5:5:0.8:3:3:0.0" },
   { id: "bright", name: "Zesvětlení", css: "brightness(1.15)", ffmpeg: "eq=brightness=0.08" },
 ];
 
@@ -185,6 +186,8 @@ export interface Preset {
   label: string;
   aspect: AspectId;
   resolution: Resolution;
+  /** Effects switched on together with the preset. */
+  effects?: string[];
 }
 
 export const PRESETS: Preset[] = [
@@ -192,6 +195,7 @@ export const PRESETS: Preset[] = [
   { id: "youtube", label: "YouTube", aspect: "16:9", resolution: 1080 },
   { id: "post", label: "Instagram příspěvek", aspect: "4:5", resolution: 1080 },
   { id: "square", label: "Čtverec", aspect: "1:1", resolution: 1080 },
+  { id: "upscale", label: "Upscale 4K + vylepšení", aspect: "original", resolution: 2160, effects: ["enhance"] },
   { id: "draft", label: "Rychlý náhled", aspect: "original", resolution: 480 },
 ];
 

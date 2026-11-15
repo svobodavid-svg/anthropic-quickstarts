@@ -29,7 +29,7 @@ const fieldClass =
 const labelClass = 'block text-sm font-medium text-slate-300 mb-2';
 
 export default function ImageGenerator() {
-  const { apiKey, addImage, setGems, catalog, characterImageId } = useStudio();
+  const { apiKey, addImage, setGems, setLastImageCost, catalog, characterImageId } = useStudio();
   const models = useMemo(
     () => (catalog?.image_models?.length ? catalog.image_models : FALLBACK_MODELS),
     [catalog]
@@ -114,6 +114,7 @@ export default function ImageGenerator() {
         })
       );
       if (typeof result.gems === 'number') setGems(result.gems);
+      if (typeof result.gems_cost === 'number' && urls.length > 0) setLastImageCost(result.gems_cost / urls.length);
       if (urls.length === 0) setError('Služba nevrátila žádný obrázek.');
     } catch (err) {
       setError(describeError(err));

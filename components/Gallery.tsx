@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useStudio } from '@/lib/store';
-import { Download, FastForward, Film, Play, Scissors, Sparkles, User } from 'lucide-react';
+import { Cloud, Download, FastForward, Film, Play, Scissors, Sparkles, Star, User } from 'lucide-react';
+import { cloudEnabled, saveToCloud } from '@/lib/cloudGallery';
 import { createClient, describeError } from '@/lib/promptchan-client';
 
 interface GalleryProps {
@@ -10,8 +11,9 @@ interface GalleryProps {
 }
 
 export default function Gallery({ type }: GalleryProps) {
-  const { apiKey, images, videos, addVideo, clearImages, clearVideos, openVideoInEditor, openImagesInEditor, animateImage, setCharacter } =
-    useStudio();
+  const { apiKey, images, videos, addVideo, clearImages, clearVideos, openVideoInEditor, openImagesInEditor, animateImage, setCharacter,
+    updateImage, updateVideo, exportPreset, setExportPreset, autoCloud, setAutoCloud } = useStudio();
+  const [onlyStarred, setOnlyStarred] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
 
@@ -35,9 +37,22 @@ export default function Gallery({ type }: GalleryProps) {
     }
   };
 
-  const items = type === 'images' ? images : videos;
+  const items = (type === 'images' ? (onlyStarred ? images.filter((i) => i.starred) : images) : videos) as any[];
 
-  if (items.length === 0) {
+  const handleCloud = async (item: any) => {
+    setNotice('');
+    try {
+      const src = type === 'images' ? item.url : item.urls[0];
+      const { path, signedUrl } = await saveToCloud(src, type === 'images' ? 'image' : 'video', item.id);
+      if (type === 'images') updateImage(item.id, { cloudPath: path, url: signedUrl });
+      else updateVideo(item.id, { cloudPath: path, urls: [signedUrl] });
+      setNotice('Uloženo do cloudu.');
+    } catch (err: any) {
+      setNotice(err.message ?? String(err));
+    }
+  };
+
+  if (items.length === 0 && !onlyStarred) {
     return (
       <div className="bg-slate-800 border border-slate-700 rounded-lg p-12 text-center">
         <div className="text-4xl mb-3">{type === 'images' ? '🖼️' : '🎥'}</div>
@@ -56,9 +71,36 @@ export default function Gallery({ type }: GalleryProps) {
           {type === 'images' ? '🖼️ Vygenerované obrázky' : '🎥 Vygenerovaná videa'} ({items.length})
         </h2>
         <div className="flex items-center gap-2">
+          <select
+            value={exportPreset ?? ''}
+            onChange={(e) => setExportPreset((e.target.value || null) as any)}
+            className="text-xs bg-slate-800 border border-slate-600 text-white rounded px-2 py-1"
+            title="Formát, který se nastaví v editoru"
+          >
+            <option value="">Editor: původní formát</option>
+            <option value="reel">Editor: Reels 9:16</option>
+            <option value="youtube">Editor: YouTube 16:9</option>
+            <option value="post">Editor: příspěvek 4:5</option>
+            <option value="square">Editor: čtverec 1:1</option>
+          </select>
+          {cloudEnabled && (
+            <label className="flex items-center gap-1 text-xs text-slate-200" title="Hotová videa se sama uloží do cloudu">
+              <input type="checkbox" checked={autoCloud} onChange={(e) => setAutoCloud(e.target.checked)} />
+              Auto cloud
+            </label>
+          )}
+          {type === 'images' && (
+            <button
+              onClick={() => setOnlyStarred(!onlyStarred)}
+              aria-pressed={onlyStarred}
+              className={`flex items-center gap-1 text-xs px-3 py-1 rounded ${onlyStarred ? 'bg-yellow-500 text-black' : 'bg-slate-600 text-white'}`}
+            >
+              <Star className="w-3 h-3" /> Výběr
+            </button>
+          )}
           {type === 'images' && images.length >= 2 && (
             <button
-              onClick={() => openImagesInEditor(images.map((image) => image.url))}
+              onClick={() => openImagesInEditor((onlyStarred ? images.filter((i) => i.starred) : images).map((image) => image.url))}
               className="flex items-center gap-1 text-xs bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded transition-colors"
               title="Vytvořit z obrázků video v editoru"
             >
@@ -135,6 +177,28 @@ export default function Gallery({ type }: GalleryProps) {
                       >
                         <Download className="w-4 h-4" />
                       </a>
+                      <button
+                        className={`p-2 rounded text-white ${item.starred ? 'bg-yellow-500' : 'bg-blue-600 hover:bg-blue-700'}`}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          updateImage(item.id, { starred: !item.starred });
+                        }}
+                        title="Označit jako nejlepší"
+                      >
+                        <Star className="w-4 h-4" />
+                      </button>
+                      {cloudEnabled && !item.cloudPath && (
+                        <button
+                          className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCloud(item);
+                          }}
+                          title="Uložit do cloudu"
+                        >
+                          <Cloud className="w-4 h-4" />
+                        </button>
+                      )}
                       {item.saved && item.imageId && (
                         <button
                           className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
@@ -182,6 +246,18 @@ export default function Gallery({ type }: GalleryProps) {
                       >
                         <Scissors className="w-4 h-4" />
                       </button>
+                      {cloudEnabled && !item.cloudPath && (
+                        <button
+                          className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleCloud(item);
+                          }}
+                          title="Uložit do cloudu (odkaz od Promptchanu po 48 h vyprší)"
+                        >
+                          <Cloud className="w-4 h-4" />
+                        </button>
+                      )}
                       {item.videoId && (
                         <button
                           className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"

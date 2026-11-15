@@ -30,7 +30,13 @@ const FormatPanel = ({ project, width, height, onChange }: FormatPanelProps) => 
         {PRESETS.map((preset) => (
           <button
             key={preset.id}
-            onClick={() => onChange({ aspect: preset.aspect, resolution: preset.resolution })}
+            onClick={() =>
+              onChange({
+                aspect: preset.aspect,
+                resolution: preset.resolution,
+                ...(preset.effects ? { effects: Array.from(new Set([...project.effects, ...preset.effects])) } : {}),
+              })
+            }
             aria-pressed={project.aspect === preset.aspect && project.resolution === preset.resolution}
             className={chip(project.aspect === preset.aspect && project.resolution === preset.resolution)}
           >

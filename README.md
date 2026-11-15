@@ -221,3 +221,6 @@ Editor přijímá videa i fotky. V generátorech lze zvolit postavu z galerie (v
 
 ## Agent (Grok)
 Nastav na serveru `XAI_API_KEY` (a volitelně `XAI_MODEL`). Klíč se nikdy nedostane do prohlížeče; `/api/grok` vyžaduje přihlášení, pokud je Supabase zapnutý.
+
+## Agent, dávky, cloud galerie
+Agent umí čekat na videa a otevřít výsledek v editoru. Galerie ukládá kopie do `editor-media/<uid>/gallery/`. Upscale je lokální (lanczos + odšum), žádný placený AI upscale.

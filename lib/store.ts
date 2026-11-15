@@ -11,6 +11,9 @@ export interface ImageItem {
   /** Promptchan image id; a saved image can be animated or used as a character. */
   imageId?: string;
   saved?: boolean;
+  starred?: boolean;
+  /** Copy kept in the private cloud bucket (survives the provider's expiring links). */
+  cloudPath?: string;
 }
 
 export interface VideoItem {
@@ -24,6 +27,7 @@ export interface VideoItem {
   params: any;
   /** Promptchan video id of a finished video, needed to extend it. */
   videoId?: string;
+  cloudPath?: string;
   failureReason?: string;
   queuePosition?: number;
 }
@@ -35,6 +39,25 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface SavedCharacter {
+  id: string;
+  name: string;
+  note: string;
+  imageId: string;
+  url: string;
+}
+
+export interface AgentTemplate {
+  id: string;
+  name: string;
+  goal: string;
+  maxImages: number;
+  maxVideos: number;
+}
+
+/** Export target chosen in the gallery; applied to the editor when media is handed over. */
+export type EditorPreset = 'reel' | 'youtube' | 'post' | 'square' | null;
+
 export type StudioTab = 'images' | 'videos' | 'editor' | 'chat' | 'agent';
 
 interface StudioStore {
@@ -43,6 +66,7 @@ interface StudioStore {
 
   images: ImageItem[];
   addImage: (image: ImageItem) => void;
+  updateImage: (id: string, updates: Partial<ImageItem>) => void;
   clearImages: () => void;
 
   videos: VideoItem[];
@@ -76,8 +100,25 @@ interface StudioStore {
   // Media handed over from the gallery to the video editor.
   editorVideoUrl: string | null;
   editorImageUrls: string[];
-  openVideoInEditor: (url: string) => void;
-  openImagesInEditor: (urls: string[]) => void;
+  editorPreset: EditorPreset;
+  exportPreset: EditorPreset;
+  setExportPreset: (preset: EditorPreset) => void;
+  openVideoInEditor: (url: string, preset?: EditorPreset) => void;
+  openImagesInEditor: (urls: string[], preset?: EditorPreset) => void;
+
+  autoCloud: boolean;
+  setAutoCloud: (on: boolean) => void;
+
+  lastImageCost: number | null;
+  setLastImageCost: (gems: number) => void;
+
+  characters: SavedCharacter[];
+  saveCharacter: (c: SavedCharacter) => void;
+  removeCharacter: (id: string) => void;
+
+  templates: AgentTemplate[];
+  saveTemplate: (t: AgentTemplate) => void;
+  removeTemplate: (id: string) => void;
   clearEditorHandoff: () => void;
 }
 
@@ -94,6 +135,8 @@ export const useStudio = create<StudioStore>()(
 
   images: [],
   addImage: (image) => set((state) => ({ images: [image, ...state.images] })),
+  updateImage: (id, updates) =>
+    set((state) => ({ images: state.images.map((i) => (i.id === id ? { ...i, ...updates } : i)) })),
   clearImages: () => set({ images: [] }),
 
   videos: [],
@@ -127,9 +170,28 @@ export const useStudio = create<StudioStore>()(
 
   editorVideoUrl: null,
   editorImageUrls: [],
-  openVideoInEditor: (url) => set({ editorVideoUrl: url, activeTab: 'editor' }),
-  openImagesInEditor: (urls) => set({ editorImageUrls: urls, activeTab: 'editor' }),
-  clearEditorHandoff: () => set({ editorVideoUrl: null, editorImageUrls: [] }),
+  editorPreset: null,
+  exportPreset: null,
+  setExportPreset: (preset) => set({ exportPreset: preset }),
+  openVideoInEditor: (url, preset) =>
+    set((state) => ({ editorVideoUrl: url, editorPreset: preset ?? state.exportPreset, activeTab: 'editor' })),
+  openImagesInEditor: (urls, preset) =>
+    set((state) => ({ editorImageUrls: urls, editorPreset: preset ?? state.exportPreset, activeTab: 'editor' })),
+  clearEditorHandoff: () => set({ editorVideoUrl: null, editorImageUrls: [], editorPreset: null }),
+
+  autoCloud: false,
+  setAutoCloud: (on) => set({ autoCloud: on }),
+
+  lastImageCost: null,
+  setLastImageCost: (gems) => set({ lastImageCost: gems }),
+
+  characters: [],
+  saveCharacter: (c) => set((state) => ({ characters: [c, ...state.characters.filter((x) => x.imageId !== c.imageId)] })),
+  removeCharacter: (id) => set((state) => ({ characters: state.characters.filter((c) => c.id !== id) })),
+
+  templates: [],
+  saveTemplate: (t) => set((state) => ({ templates: [t, ...state.templates.filter((x) => x.id !== t.id)] })),
+  removeTemplate: (id) => set((state) => ({ templates: state.templates.filter((t) => t.id !== id) })),
     }),
     {
       name: 'multimedia-studio',
@@ -139,6 +201,10 @@ export const useStudio = create<StudioStore>()(
       partialize: (state) => ({
         images: state.images.filter((image) => image.url.startsWith('http')).slice(0, 60),
         videos: state.videos.slice(0, 60),
+        autoCloud: state.autoCloud,
+        lastImageCost: state.lastImageCost,
+        characters: state.characters,
+        templates: state.templates,
       }),
     }
   )

@@ -18,6 +18,7 @@ import { iconButton } from "./ui";
 import { RenderCancelled, useFFmpeg, type EffectType } from "@/hooks/useFFmpeg";
 import { canSplit, useProject } from "@/hooks/useProject";
 import { createClip, renderTextImage } from "@/lib/editor/media";
+import type { AspectId, Resolution } from "@/lib/editor/types";
 import {
   assignFileNames,
   buildRenderPlan,
@@ -48,12 +49,19 @@ const CORS_HINT = "Server nepovolil stažení z prohlížeče. Stáhněte soubor
 const isTyping = (target: EventTarget | null) =>
   target instanceof HTMLElement && /^(INPUT|TEXTAREA|SELECT)$/.test(target.tagName);
 
+const EDITOR_PRESETS: Record<string, { aspect: AspectId; resolution: Resolution }> = {
+  reel: { aspect: "9:16", resolution: 1080 },
+  youtube: { aspect: "16:9", resolution: 1080 },
+  post: { aspect: "4:5", resolution: 1080 },
+  square: { aspect: "1:1", resolution: 1080 },
+};
+
 const VideoEditor = () => {
   const api = useProject();
   const { project, update, select, addClips, updateClip } = api;
   const ffmpeg = useFFmpeg();
   const { loadFFmpeg, render, muxAudio, generateVideoFromImages, imageToClip } = ffmpeg;
-  const { editorVideoUrl, editorImageUrls, clearEditorHandoff } = useStudio();
+  const { editorVideoUrl, editorImageUrls, editorPreset, clearEditorHandoff } = useStudio();
 
   const [activeTool, setActiveTool] = useState<ToolId>("clip");
   const [isPlaying, setIsPlaying] = useState(false);
@@ -268,7 +276,10 @@ const VideoEditor = () => {
     if (!editorVideoUrl && editorImageUrls.length === 0) return;
     const videoToLoad = editorVideoUrl;
     const imagesToLoad = editorImageUrls;
+    const preset = editorPreset;
     clearEditorHandoff();
+    const target = preset ? EDITOR_PRESETS[preset] : undefined;
+    if (target) update((p) => ({ ...p, ...target }));
 
     if (videoToLoad) {
       setActiveTool("clip");
@@ -295,7 +306,7 @@ const VideoEditor = () => {
         }
       });
     }
-  }, [editorVideoUrl, editorImageUrls, clearEditorHandoff, addFiles]);
+  }, [editorVideoUrl, editorImageUrls, editorPreset, clearEditorHandoff, addFiles, update]);
 
   const reportFailure = useCallback((error: unknown, title: string) => {
     if (error instanceof RenderCancelled) {

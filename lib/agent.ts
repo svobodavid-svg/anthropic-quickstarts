@@ -26,6 +26,7 @@ interface Msg {
 
 const SYSTEM = `Jsi produkční agent Multimedia Studia. Uživatel zadá cíl; ty ho splníš voláním nástrojů.
 Postup: stručně naplánuj, pak volej nástroje (nejdřív get_account, pokud jde o víc než jeden výstup), nakonec shrň, co vzniklo.
+Pokud uživatel chce hotový střih, po vygenerování zavolej await_videos a jako POSLEDNÍ krok open_in_editor (otevře editor, další nástroje už nevolej).
 Pravidla:
 - Tvoř jen fiktivní/původní postavy. Nikdy neprosaď podobu skutečné osoby ani nezletilé postavy.
 - Respektuj limity běhu; když je nástroj odmítne, neobcházej je, ale řekni to.
@@ -83,6 +84,30 @@ const TOOLS = [
       },
     },
   },
+  {
+    type: 'function',
+    function: {
+      name: 'await_videos',
+      description: 'Počká (až 6 minut), než se dokončí videa odeslaná v tomto běhu, a vrátí jejich stav.',
+      parameters: { type: 'object', properties: {} },
+    },
+  },
+  {
+    type: 'function',
+    function: {
+      name: 'open_in_editor',
+      description:
+        'POSLEDNÍ krok: otevře výsledek v editoru a nastaví formát. what=video otevře první hotové video z běhu, what=images všechny obrázky z běhu (složí se do videa).',
+      parameters: {
+        type: 'object',
+        properties: {
+          what: { type: 'string', enum: ['video', 'images'] },
+          preset: { type: 'string', enum: ['reel', 'youtube', 'post', 'square'] },
+        },
+        required: ['what'],
+      },
+    },
+  },
 ];
 
 async function callGrok(messages: Msg[]) {
@@ -104,6 +129,7 @@ export async function runAgent(
   signal: AbortSignal
 ) {
   const used = { images: 0, videos: 0 };
+  const made = { imageUrls: [] as string[], videoIds: [] as string[] };
   const messages: Msg[] = [
     { role: 'system', content: SYSTEM },
     { role: 'user', content: `${goal}\n\nLimity tohoto běhu: max ${limits.maxImages} obrázků, max ${limits.maxVideos} videí.` },
@@ -143,11 +169,13 @@ export async function runAgent(
             : {}),
         });
         used.images++;
+        if (typeof result.gems_cost === 'number') store.setLastImageCost(result.gems_cost);
         const urls = result.image_urls?.length
           ? result.image_urls
           : (result.images?.length ? result.images : result.image ? [result.image] : []).map(
               (d) => `data:image/jpeg;base64,${d}`
             );
+        made.imageUrls.push(...urls);
         urls.forEach((url, i) =>
           store.addImage({
             id: `${Date.now()}-a${i}`,
@@ -176,8 +204,10 @@ export async function runAgent(
         };
         const r = await client.submitVideo(request);
         used.videos++;
+        const vid = `${Date.now()}`;
+        made.videoIds.push(vid);
         store.addVideo({
-          id: `${Date.now()}`,
+          id: vid,
           requestId: r.request_id,
           prompt: String(args.prompt),
           timestamp: Date.now(),
@@ -186,6 +216,31 @@ export async function runAgent(
           params: request,
         });
         return JSON.stringify({ queued: true, note: 'Video se objeví v záložce Videa.' });
+      }
+      case 'await_videos': {
+        if (made.videoIds.length === 0) return 'V tomto běhu nebylo odesláno žádné video.';
+        const deadline = Date.now() + 6 * 60_000;
+        const state = () =>
+          useStudio.getState().videos.filter((v) => made.videoIds.includes(v.id));
+        while (Date.now() < deadline && !signal.aborted) {
+          if (state().every((v) => v.status === 'completed' || v.status === 'failed')) break;
+          await new Promise((r) => setTimeout(r, 5000));
+        }
+        return JSON.stringify(
+          state().map((v) => ({ status: v.status, progress: v.progress ?? 0, ready: v.status === 'completed', failure: v.failureReason ?? null }))
+        );
+      }
+      case 'open_in_editor': {
+        const preset = ['reel', 'youtube', 'post', 'square'].includes(args.preset) ? args.preset : null;
+        if (args.what === 'video') {
+          const done = useStudio.getState().videos.find((v) => made.videoIds.includes(v.id) && v.status === 'completed' && v.urls?.length);
+          if (!done) return 'Žádné hotové video z tohoto běhu.';
+          store.openVideoInEditor(done.urls![0], preset);
+          return 'Otevřeno v editoru.';
+        }
+        if (made.imageUrls.length === 0) return 'Žádné obrázky z tohoto běhu.';
+        store.openImagesInEditor(made.imageUrls, preset);
+        return 'Obrázky otevřeny v editoru.';
       }
       default:
         return `Neznámý nástroj ${name}`;

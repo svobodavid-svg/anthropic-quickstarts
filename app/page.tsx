@@ -6,6 +6,7 @@ import { useStudio } from '@/lib/store';
 import Settings from '@/components/Settings';
 import ImageGenerator from '@/components/ImageGenerator';
 import VideoGenerator from '@/components/VideoGenerator';
+import BatchPanel from '@/components/BatchPanel';
 import AgentPanel from '@/components/AgentPanel';
 import ChatInterface from '@/components/ChatInterface';
 import Gallery from '@/components/Gallery';
@@ -18,6 +19,7 @@ const VideoEditor = dynamic(() => import('@/components/VideoEditor'), { ssr: fal
 function Studio() {
   const [mounted, setMounted] = useState(false);
   const [editorOpened, setEditorOpened] = useState(false);
+  const [agentOpened, setAgentOpened] = useState(false);
   const { activeTab, setActiveTab, apiKey } = useStudio();
   usePromptchan();
 
@@ -28,6 +30,7 @@ function Studio() {
   // Mount the editor on first visit, then keep it mounted so work survives tab switches.
   useEffect(() => {
     if (activeTab === 'editor') setEditorOpened(true);
+    if (activeTab === 'agent') setAgentOpened(true);
   }, [activeTab]);
 
   if (!mounted) return null;
@@ -84,6 +87,7 @@ function Studio() {
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-1">
                 <ImageGenerator />
+                <BatchPanel />
               </div>
               <div className="lg:col-span-2">
                 <Gallery type="images" />
@@ -108,7 +112,11 @@ function Studio() {
             </div>
           )}
 
-          {activeTab === 'agent' && <AgentPanel />}
+          {agentOpened && (
+            <div className={activeTab === 'agent' ? '' : 'hidden'}>
+              <AgentPanel />
+            </div>
+          )}
           {activeTab === 'chat' && <ChatInterface />}
         </main>
       </div>

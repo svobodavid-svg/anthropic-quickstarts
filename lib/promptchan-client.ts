@@ -1,13 +1,17 @@
+import { supabase } from './supabase';
+
 /**
  * Client for the Promptchan API v2.1.
  *
  * Images, chat, the catalog and the account live on one host; every video endpoint lives
- * on another. The same key works on both. Requests go straight from the browser, with the
- * key the user entered in Settings.
+ * on another (the relay picks the host). The same key works on both. The key the user
+ * entered in Settings is sent per request and never stored on the server.
  */
 
-const MAIN_HOST = 'https://prod.aicloudnetservices.com';
-const VIDEO_HOST = 'https://film.aicloudnetservices.com';
+// Promptchan sends no CORS headers, so browsers cannot call it directly. Requests go to the
+// studio's own /api/pc relay, which forwards them (video endpoints to their own host).
+const MAIN_HOST = '/api/pc';
+const VIDEO_HOST = '/api/pc';
 
 export type Aspect = 'Portrait' | 'Wide' | 'Square';
 export type VideoModel = 'auto' | 'v4' | 'v4-voice';
@@ -208,10 +212,12 @@ export class PromptchanClient {
   private async request<T>(host: string, path: string, body?: unknown, query?: string): Promise<T> {
     let response: Response;
     try {
+      const token = (await supabase?.auth.getSession())?.data.session?.access_token;
       response = await fetch(`${host}${path}${query ?? ''}`, {
         method: body === undefined ? 'GET' : 'POST',
         headers: {
           'x-api-key': this.apiKey,
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
           ...(body === undefined ? {} : { 'Content-Type': 'application/json' }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),

@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.5.2] - 2026-11-15
+
+### Fixed
+- Promptchan nevrací CORS hlavičky, takže prohlížeč (iPhone) volání zahodil. Všechna volání teď jdou přes vlastní relay `/api/pc/*` na serveru studia (klíč se posílá jen v požadavku, na serveru se neukládá; s Supabase jen pro pozvané).
+
 ## [1.5.1] - 2026-11-15
 
 ### Fixed

@@ -1,33 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { isInvited } from '@/lib/server/auth';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
 const XAI_URL = 'https://api.x.ai/v1/chat/completions';
-const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
-const SUPABASE_KEY = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY;
-
-/**
- * With Supabase configured, only signed-in, invited users may spend the xAI key: the
- * caller's token is checked against the `allowed_emails` policy (a member sees their own row).
- */
-async function isInvited(request: NextRequest): Promise<boolean> {
-  if (!SUPABASE_URL || !SUPABASE_KEY) return true; // local mode
-  const auth = request.headers.get('authorization');
-  if (!auth?.startsWith('Bearer ')) return false;
-  try {
-    const res = await fetch(`${SUPABASE_URL}/rest/v1/allowed_emails?select=email&limit=1`, {
-      headers: { apikey: SUPABASE_KEY, Authorization: auth },
-      cache: 'no-store',
-    });
-    if (!res.ok) return false;
-    const rows = await res.json();
-    return Array.isArray(rows) && rows.length > 0;
-  } catch {
-    return false;
-  }
-}
-
 export async function GET() {
   return NextResponse.json({ configured: !!process.env.XAI_API_KEY });
 }

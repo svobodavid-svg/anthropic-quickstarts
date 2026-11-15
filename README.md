@@ -224,3 +224,6 @@ Nastav na serveru `XAI_API_KEY` (a volitelně `XAI_MODEL`). Klíč se nikdy nedo
 
 ## Agent, dávky, cloud galerie
 Agent umí čekat na videa a otevřít výsledek v editoru. Galerie ukládá kopie do `editor-media/<uid>/gallery/`. Upscale je lokální (lanczos + odšum), žádný placený AI upscale.
+
+## Relay Promptchanu
+Promptchan nepovoluje volání z prohlížeče (bez CORS). Studio proto volá `/api/pc/*`, které požadavek přepošle na Promptchan. Klíč se neukládá.

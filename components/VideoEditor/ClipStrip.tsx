@@ -72,7 +72,7 @@ const ClipStrip = ({
         <input
           ref={inputRef}
           type="file"
-          accept="video/*"
+          accept="video/*,image/*"
           multiple
           className="hidden"
           onChange={(e) => {
@@ -88,7 +88,7 @@ const ClipStrip = ({
                      transition-colors disabled:opacity-50"
         >
           <Plus className="w-5 h-5" />
-          <span className="text-[11px]">Přidat video</span>
+          <span className="text-[11px]">Přidat</span>
         </button>
       </div>
 

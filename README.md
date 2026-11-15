@@ -215,3 +215,6 @@ Notes and limits:
   send CORS headers the editor says so; download the file and load it manually.
 
 Not implemented yet: server-side API key, AI upscaling, password reset screen.
+
+## Foto import a AI Character
+Editor přijímá videa i fotky. V generátorech lze zvolit postavu z galerie (vyžaduje plán Pro a gemy); zachovává vzhled vygenerované osoby.

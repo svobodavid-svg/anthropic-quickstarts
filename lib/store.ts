@@ -66,6 +66,10 @@ interface StudioStore {
   animateImageId: string | null;
   animateImage: (imageId: string | null) => void;
 
+  /** Saved image whose character new generations should keep (AI Character). */
+  characterImageId: string | null;
+  setCharacter: (imageId: string | null) => void;
+
   activeTab: StudioTab;
   setActiveTab: (tab: StudioTab) => void;
 
@@ -111,6 +115,9 @@ export const useStudio = create<StudioStore>()(
   setCatalog: (catalog) => set({ catalog }),
   account: null,
   setAccount: (account) => set(account ? { account, gems: account.gems } : { account }),
+
+  characterImageId: null,
+  setCharacter: (imageId) => set(imageId ? { characterImageId: imageId, activeTab: 'images' } : { characterImageId: null }),
 
   animateImageId: null,
   animateImage: (imageId) => set(imageId ? { animateImageId: imageId, activeTab: 'videos' } : { animateImageId: null }),

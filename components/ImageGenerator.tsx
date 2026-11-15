@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Loader, Zap } from 'lucide-react';
 import { createClient, describeError, type Aspect, type CatalogImageModel } from '@/lib/promptchan-client';
 import { useStudio } from '@/lib/store';
+import CharacterPicker from './CharacterPicker';
 
 /** Used until the catalog loads, or when it cannot be loaded. */
 const FALLBACK_MODELS: CatalogImageModel[] = ['Hyperreal XL+', 'Photo XL+', 'Cinematic XL', 'Anime XL', 'Cinematic'].map(
@@ -28,7 +29,7 @@ const fieldClass =
 const labelClass = 'block text-sm font-medium text-slate-300 mb-2';
 
 export default function ImageGenerator() {
-  const { apiKey, addImage, setGems, catalog } = useStudio();
+  const { apiKey, addImage, setGems, catalog, characterImageId } = useStudio();
   const models = useMemo(
     () => (catalog?.image_models?.length ? catalog.image_models : FALLBACK_MODELS),
     [catalog]
@@ -44,6 +45,7 @@ export default function ImageGenerator() {
   const [aspect, setAspect] = useState<Aspect>('Portrait');
   const [count, setCount] = useState(1);
   const [save, setSave] = useState(false);
+  const [characterVersion, setCharacterVersion] = useState('v2');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
@@ -60,8 +62,14 @@ export default function ImageGenerator() {
     if (!model.aspects.includes(aspect)) setAspect(model.aspects[0] ?? 'Portrait');
     if (!poses.includes(pose)) setPose('Default');
     if (count > model.max_images) setCount(1);
+    if (!model.character_versions.includes(characterVersion)) {
+      setCharacterVersion(model.character_versions.includes('v2') ? 'v2' : model.character_versions[0] ?? 'v2');
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [model.name]);
+
+  // A character only applies on models that support it.
+  const character = model.character_versions.length > 0 ? characterImageId : null;
 
   const handleGenerate = async () => {
     if (!prompt.trim()) {
@@ -81,7 +89,9 @@ export default function ImageGenerator() {
         emotion,
         ...(quality ? { quality } : {}),
         aspect,
-        ...(count > 1 ? { count } : {}),
+        // Several images per request are not available together with a character.
+        ...(count > 1 && !character ? { count } : {}),
+        ...(character ? { character_image_id: character, character_version: characterVersion } : {}),
         ...(save ? { save_to_gallery: true } : {}),
       });
 
@@ -202,6 +212,17 @@ export default function ImageGenerator() {
               Array.from({ length: model.max_images }, (_, i) => ({ value: String(i + 1), label: String(i + 1) }))
             )}
         </div>
+
+        {model.character_versions.length > 0 ? (
+          <CharacterPicker
+            disabled={loading}
+            versions={model.character_versions}
+            version={characterVersion}
+            onVersionChange={setCharacterVersion}
+          />
+        ) : (
+          characterImageId && <p className="text-xs text-slate-400">Tento model postavu nepodporuje.</p>
+        )}
 
         <label className="flex items-start gap-2 text-sm text-slate-300">
           <input

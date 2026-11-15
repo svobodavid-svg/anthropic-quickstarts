@@ -235,6 +235,41 @@ export const useFFmpeg = () => {
     [runJob]
   );
 
+  /**
+   * Turn a photo into a still video clip. The picture keeps its proportions; only very
+   * large photos are scaled down (longest side 1920).
+   */
+  const imageToClip = useCallback(
+    (image: File, seconds: number): Promise<Blob> =>
+      runJob(seconds, async (ffmpeg) => {
+        const input = `still.${imageExt(image)}`;
+        const output = "still.mp4";
+        try {
+          await ffmpeg.writeFile(input, await fetchFile(image));
+          await exec(ffmpeg, [
+            // A still needs few frames: 5 fps keeps the conversion to a few seconds, and the
+            // export resamples every clip to its own frame rate anyway.
+            "-loop", "1",
+            "-framerate", "5",
+            "-t", String(seconds),
+            "-i", input,
+            "-vf", "scale=w='min(1920,iw)':h='min(1920,ih)':force_original_aspect_ratio=decrease:force_divisible_by=2,setsar=1,format=yuv420p",
+            "-c:v", "libx264",
+            "-preset", "ultrafast",
+            "-tune", "stillimage",
+            "-crf", "18",
+            "-y", output,
+          ]);
+          return toMp4Blob(await ffmpeg.readFile(output));
+        } finally {
+          if (!cancelledRef.current) {
+            for (const name of [input, output]) await ffmpeg.deleteFile(name).catch(() => undefined);
+          }
+        }
+      }),
+    [runJob]
+  );
+
   /** Encode a PCM mix to AAC and attach it to an already encoded video (no video re-encode). */
   const muxAudio = useCallback(
     (video: Blob, wav: Uint8Array): Promise<Blob> =>
@@ -265,5 +300,5 @@ export const useFFmpeg = () => {
     [runJob]
   );
 
-  return { isProcessing, progress, loadFFmpeg, render, muxAudio, generateVideoFromImages, cancel };
+  return { isProcessing, progress, loadFFmpeg, render, muxAudio, generateVideoFromImages, imageToClip, cancel };
 };

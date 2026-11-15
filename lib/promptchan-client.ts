@@ -67,7 +67,9 @@ export interface ImageRequest {
   count?: number;
   seed?: number;
   save_to_gallery?: boolean;
+  /** AI Character: one of the account's own saved images. */
   character_image_id?: string;
+  character_version?: string;
 }
 
 export interface ImageResponse {
@@ -89,6 +91,8 @@ export interface VideoRequest {
   model?: string;
   pose?: string;
   image_id?: string;
+  /** From text: keep the look of a saved image's character. */
+  character_image_id?: string;
   quality?: 'Standard' | 'High';
   loop?: boolean;
   audio?: boolean;

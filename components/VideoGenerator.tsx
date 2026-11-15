@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { Loader, X, Zap } from 'lucide-react';
 import { createClient, describeError, type Aspect, type VideoModel, type VideoRequest } from '@/lib/promptchan-client';
 import { useStudio } from '@/lib/store';
+import CharacterPicker from './CharacterPicker';
 
 const ASPECT_LABEL: Record<Aspect, string> = { Portrait: 'Na výšku', Wide: 'Na šířku', Square: 'Čtverec' };
 const MODEL_LABEL: Record<VideoModel, string> = {
@@ -28,7 +29,7 @@ const fieldClass =
 const labelClass = 'block text-sm font-medium text-slate-300 mb-2';
 
 export default function VideoGenerator() {
-  const { apiKey, addVideo, catalog, images, animateImageId, animateImage } = useStudio();
+  const { apiKey, addVideo, catalog, images, animateImageId, animateImage, characterImageId } = useStudio();
 
   const [videoModel, setVideoModel] = useState<VideoModel>('auto');
   const [prompt, setPrompt] = useState('');
@@ -78,7 +79,12 @@ export default function VideoGenerator() {
       // An animated image brings its own model, pose and shape.
       ...(animateImageId
         ? { image_id: animateImageId }
-        : { aspect, pose, ...(firstFrameModel ? { model: firstFrameModel.name } : {}) }),
+        : {
+            aspect,
+            pose,
+            ...(firstFrameModel ? { model: firstFrameModel.name } : {}),
+            ...(characterImageId ? { character_image_id: characterImageId } : {}),
+          }),
       ...(voice
         ? {
             ...(dialogue.trim()
@@ -202,6 +208,8 @@ export default function VideoGenerator() {
             )}
           </div>
         )}
+
+        {!animateImageId && <CharacterPicker disabled={loading} />}
 
         {videoModel !== 'v4' && (
           <div>

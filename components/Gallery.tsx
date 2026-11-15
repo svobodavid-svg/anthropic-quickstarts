@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useStudio } from '@/lib/store';
-import { Download, FastForward, Film, Play, Scissors, Sparkles } from 'lucide-react';
+import { Download, FastForward, Film, Play, Scissors, Sparkles, User } from 'lucide-react';
 import { createClient, describeError } from '@/lib/promptchan-client';
 
 interface GalleryProps {
@@ -10,7 +10,7 @@ interface GalleryProps {
 }
 
 export default function Gallery({ type }: GalleryProps) {
-  const { apiKey, images, videos, addVideo, clearImages, clearVideos, openVideoInEditor, openImagesInEditor, animateImage } =
+  const { apiKey, images, videos, addVideo, clearImages, clearVideos, openVideoInEditor, openImagesInEditor, animateImage, setCharacter } =
     useStudio();
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
@@ -145,6 +145,18 @@ export default function Gallery({ type }: GalleryProps) {
                           title="Rozpohybovat ve videu"
                         >
                           <Sparkles className="w-4 h-4" />
+                        </button>
+                      )}
+                      {item.saved && item.imageId && (
+                        <button
+                          className="p-2 bg-blue-600 hover:bg-blue-700 rounded text-white"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setCharacter(item.imageId);
+                          }}
+                          title="Použít jako postavu"
+                        >
+                          <User className="w-4 h-4" />
                         </button>
                       )}
                     </>

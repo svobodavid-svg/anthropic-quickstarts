@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.3.0] - 2026-11-15
+
+### Added
+- Editor: import fotek (JPG/PNG/WebP) – foto se stane klipem (Ken Burns, 10 s, nastavitelná délka).
+- AI Character: výběr uložené vygenerované osoby (`character_image_id`, v2/v3) pro nové obrázky i videa, galerie má „Použít jako postavu“.
+
 ## [1.2.0] - 2026-11-14
 
 ### Changed

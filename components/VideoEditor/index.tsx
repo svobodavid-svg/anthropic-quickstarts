@@ -39,6 +39,10 @@ const fetchAsFile = async (url: string, name: string, fallbackType: string): Pro
   return new File([blob], name, { type: blob.type || fallbackType });
 };
 
+/** A photo is rendered as a clip of this length and shown for the shorter one by default. */
+const PHOTO_CLIP_SECONDS = 10;
+const PHOTO_SHOWN_SECONDS = 4;
+
 const CORS_HINT = "Server nepovolil stažení z prohlížeče. Stáhněte soubor a nahrajte ho ručně.";
 
 const isTyping = (target: EventTarget | null) =>
@@ -48,7 +52,7 @@ const VideoEditor = () => {
   const api = useProject();
   const { project, update, select, addClips, updateClip } = api;
   const ffmpeg = useFFmpeg();
-  const { loadFFmpeg, render, muxAudio, generateVideoFromImages } = ffmpeg;
+  const { loadFFmpeg, render, muxAudio, generateVideoFromImages, imageToClip } = ffmpeg;
   const { editorVideoUrl, editorImageUrls, clearEditorHandoff } = useStudio();
 
   const [activeTool, setActiveTool] = useState<ToolId>("clip");
@@ -217,10 +221,34 @@ const VideoEditor = () => {
   // --- Media in ---------------------------------------------------------------------------
 
   const addFiles = useCallback(
-    async (files: File[]) => {
-      if (files.length === 0) return;
+    async (picked: File[]) => {
+      if (picked.length === 0) return;
+
+      // Photos become still clips: rendered longer than shown, so they can be stretched
+      // with the trim slider afterwards.
+      const files: File[] = [];
+      const photos = new Set<File>();
+      for (const file of picked) {
+        if (!file.type.startsWith("image/")) {
+          files.push(file);
+          continue;
+        }
+        try {
+          const blob = await imageToClip(file, PHOTO_CLIP_SECONDS);
+          const clipFile = new File([blob], `${file.name.replace(/\.[^.]+$/, "")}.mp4`, { type: "video/mp4" });
+          photos.add(clipFile);
+          files.push(clipFile);
+        } catch {
+          toast({ title: `Fotku ${file.name} se nepodařilo převést`, variant: "destructive" });
+        }
+      }
+
       const results = await Promise.allSettled(files.map(createClip));
-      const clips = results.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
+      const clips = results.flatMap((r, i) =>
+        r.status === "fulfilled"
+          ? [photos.has(files[i]) ? { ...r.value, trimEnd: Math.min(PHOTO_SHOWN_SECONDS, r.value.duration) } : r.value]
+          : []
+      );
       addClips(clips);
 
       const failed = results.length - clips.length;
@@ -232,7 +260,7 @@ const VideoEditor = () => {
         });
       }
     },
-    [addClips]
+    [addClips, imageToClip]
   );
 
   // Media handed over from the studio gallery.
@@ -606,7 +634,7 @@ const VideoEditor = () => {
               <input
                 ref={uploadRef}
                 type="file"
-                accept="video/*"
+                accept="video/*,image/*"
                 multiple
                 className="hidden"
                 onChange={(e) => {
@@ -623,8 +651,8 @@ const VideoEditor = () => {
                   <Upload className="w-6 h-6 text-primary" />
                 </div>
                 <div className="text-left">
-                  <p className="font-semibold">Nahrát video</p>
-                  <p className="text-sm text-muted-foreground">Jedno nebo více, MP4 / MOV / WebM</p>
+                  <p className="font-semibold">Nahrát video nebo fotku</p>
+                  <p className="text-sm text-muted-foreground">Jedno nebo více; fotka se vloží jako klip</p>
                 </div>
               </button>
             </div>

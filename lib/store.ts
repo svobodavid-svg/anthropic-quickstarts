@@ -35,7 +35,7 @@ export interface ChatMessage {
   timestamp: number;
 }
 
-export type StudioTab = 'images' | 'videos' | 'editor' | 'chat';
+export type StudioTab = 'images' | 'videos' | 'editor' | 'chat' | 'agent';
 
 interface StudioStore {
   apiKey: string;

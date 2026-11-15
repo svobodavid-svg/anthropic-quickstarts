@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.0] - 2026-11-15
+
+### Added
+- Záložka Agent: autonomní agent řízený Grokem (xAI). Plánuje a sám volá nástroje (účet, galerie, generování obrázků a videí přes Promptchan) s tvrdými limity na běh (počet obrázků/videí, max. 10 kroků).
+- `/api/grok`: serverová proxy, klíč `XAI_API_KEY` zůstává na serveru; s Supabase pouští jen přihlášené pozvané uživatele. Model `XAI_MODEL` (výchozí `grok-4`).
+
 ## [1.3.0] - 2026-11-15
 
 ### Added

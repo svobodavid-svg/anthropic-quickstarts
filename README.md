@@ -218,3 +218,6 @@ Not implemented yet: server-side API key, AI upscaling, password reset screen.
 
 ## Foto import a AI Character
 Editor přijímá videa i fotky. V generátorech lze zvolit postavu z galerie (vyžaduje plán Pro a gemy); zachovává vzhled vygenerované osoby.
+
+## Agent (Grok)
+Nastav na serveru `XAI_API_KEY` (a volitelně `XAI_MODEL`). Klíč se nikdy nedostane do prohlížeče; `/api/grok` vyžaduje přihlášení, pokud je Supabase zapnutý.

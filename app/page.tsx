@@ -6,6 +6,7 @@ import { useStudio } from '@/lib/store';
 import Settings from '@/components/Settings';
 import ImageGenerator from '@/components/ImageGenerator';
 import VideoGenerator from '@/components/VideoGenerator';
+import AgentPanel from '@/components/AgentPanel';
 import ChatInterface from '@/components/ChatInterface';
 import Gallery from '@/components/Gallery';
 import AuthGate from '@/components/AuthGate';
@@ -56,7 +57,7 @@ function Studio() {
         <div className="border-b border-slate-700 bg-slate-800/50 backdrop-blur">
           <div className="max-w-7xl mx-auto px-6">
             <div className="flex gap-1 overflow-x-auto">
-              {(['images', 'videos', 'editor', 'chat'] as const).map((tab) => (
+              {(['images', 'videos', 'editor', 'agent', 'chat'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setActiveTab(tab)}
@@ -69,6 +70,7 @@ function Studio() {
                   {tab === 'images' && '🖼️ Obrázky'}
                   {tab === 'videos' && '🎥 Videa'}
                   {tab === 'editor' && '✂️ Editor'}
+                  {tab === 'agent' && '🤖 Agent'}
                   {tab === 'chat' && '💬 Chat'}
                 </button>
               ))}
@@ -106,6 +108,7 @@ function Studio() {
             </div>
           )}
 
+          {activeTab === 'agent' && <AgentPanel />}
           {activeTab === 'chat' && <ChatInterface />}
         </main>
       </div>
